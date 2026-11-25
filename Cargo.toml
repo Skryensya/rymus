@@ -1,0 +1,21 @@
+[package]
+name = "rymus"
+version = "0.1.0"
+edition = "2021"
+description = "Search YouTube Music and play it inside your terminal"
+license = "MIT"
+repository = "https://github.com/Skryensya/ymus"
+
+[dependencies]
+crossterm = "0.28"                                    # raw mode, keys, mouse, resize
+ureq = { version = "2", features = ["json"] }         # blocking HTTP, no async runtime
+serde_json = "1"
+rusqlite = { version = "0.32", features = ["bundled"] }
+unicode-width = "0.2"
+base64 = "0.22"                                       # kitty graphics protocol
+libc = "0.2"                                          # mpv's extra pipe, signals, local time
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true

@@ -1,5 +1,4 @@
-node_modules/
+target/
 .DS_Store
 *.db
 *.db-*
-cookies.txt

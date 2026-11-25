@@ -1,4 +1,6 @@
-# ymus
+# rymus
+
+ymus rewritten in Rust. The original JavaScript version is frozen in the [`js`](https://github.com/Skryensya/ymus/tree/js) branch; both share the database in `~/.ymus`.
 
 Search YouTube Music and play it inside your terminal. No account needed.
 
@@ -10,18 +12,21 @@ Search YouTube Music and play it inside your terminal. No account needed.
 
 ## Install
 
-Needs Node.js 24 or newer, plus `mpv`, `yt-dlp` and `ffmpeg`. Developed on macOS with Ghostty; other systems are untested.
+Needs `mpv`, `yt-dlp` and `ffmpeg` to run. Developed on macOS with Ghostty; other systems are untested.
+
+On a Mac with Apple silicon, download the binary from [Releases](https://github.com/Skryensya/ymus/releases). It is not signed, so macOS may need `xattr -d com.apple.quarantine rymus` before the first run.
+
+To build it yourself you need a Rust toolchain:
 
 ```sh
 brew install mpv yt-dlp ffmpeg
 git clone https://github.com/Skryensya/ymus.git
 cd ymus
-npm install
-npm link
-ymus
+cargo install --path .
+rymus
 ```
 
-Cover images use the kitty graphics protocol (Ghostty, kitty, WezTerm) and fall back to colored blocks. Icons are Nerd Font glyphs; run `YM_PLAIN=1 ymus` without them.
+Cover images use the kitty graphics protocol (Ghostty, kitty, WezTerm) and fall back to colored blocks. Icons are Nerd Font glyphs; run `YM_PLAIN=1 rymus` without them.
 
 ## Keys
 
@@ -36,7 +41,7 @@ Cover images use the kitty graphics protocol (Ghostty, kitty, WezTerm) and fall 
 | `a` `m` | add to queue, actions menu |
 | `D` `R` | discover, radio |
 | `y` `v` `w` | lyrics, full player, visualizer |
-| `V` · `[ ]` | trip: full screen visualizer · change its mode |
+| `V` | trip: full screen visualizer that follows the song |
 | `?` `q` | all keys, quit |
 
 ## Your data
@@ -49,7 +54,11 @@ Likes, history and settings stay in `~/.ymus/ymus.db`. The services used receive
 
 ## Tests
 
-`npm test`
+`cargo test`
+
+## Benchmark
+
+`python3 bench/bench.py <command> [<command>…]` compares builds in a pseudo terminal, with audio output off. For example `python3 bench/bench.py ./target/release/rymus`.
 
 ## Notes
 
