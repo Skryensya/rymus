@@ -1,134 +1,139 @@
-// Psychedelic full-screen visualizer in ASCII, after Windows Media Player's "Battery" and MilkDrop. Like them it is a
-// feedback loop: every frame starts from the previous one, zoomed, rotated and faded, so whatever is drawn leaves
-// trails. On top of that each frame paints the current mode's pattern and a ring shaped by the spectrum.
-// It follows the song: loudness sets how much gets painted (silence fades to black), the bass drives zoom and beats
-// (flash, kick, a turn the other way), the mids the rotation, the treble the length of the trails. A new song picks
-// its own mode and turn; a big drop changes mode. Colors start from the cover's main color.
-const RAMP = ' .:-=+*#%@';
-const MIN_MODE = 8, MAX_MODE = 30; // seconds a mode lasts: a drop can change it after MIN, it changes anyway after MAX
+// Psychedelic full-screen visualizer in ASCII, after Windows Media Player's "Battery" and MilkDrop. One ethereal field,
+// like smoke, seen as an endless tunnel: shapes are born in the middle and drift outwards, so it always feels like
+// flying forward through it, at the song's pace. Each song gets its own look from its id (symmetry, spiral, swirl size,
+// noise seed), and the music keeps shaping it: the bass bends and wobbles the smoke, the spectrum lights it by angle, the tempo and loudness set the speed, each beat pushes forward and sends a soft
+// ripple out, and the dynamic range sets how strongly the symmetry shows. Everything that comes from the sound is
+// smoothed, so nothing flickers. Colors come from the cover's palette, carried by the flow. The background is never black.
+const RAMP = " .`':-~=+*";
 
 const avg = (a, i, j) => a.slice(i, j).reduce((s, v) => s + v, 0) / (j - i);
-const clamp = v => Math.max(-1, Math.min(1, v));
-
-function hsv(h, s, v) {
-  h = ((h % 1) + 1) % 1;
-  const f = n => { const k = (n + h * 6) % 6; return v - v * s * Math.max(0, Math.min(k, 4 - k, 1)); };
-  return [f(5), f(3), f(1)].map(c => Math.round(c * 255));
-}
-function hue([r, g, b]) {
-  const max = Math.max(r, g, b), d = max - Math.min(r, g, b);
-  if (!d) return 0;
-  return ((max === r ? (g - b) / d + 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4) % 6) / 6;
-}
-
-// Each mode: p paints (a point x, y roughly in -1..1, time, bass -> -1..1, only the bright part shows), z and r scale
-// how the feedback zooms (negative: shrinks towards the center) and turns.
-const polar = (x, y) => [Math.hypot(x, y), Math.atan2(y, x)];
-export const MODES = {
-  plasma: { z: 1, r: 1, p: (x, y, t, b) => { const z = 3 + b * 4; return (Math.sin(x * z + t) + Math.sin(y * z * 1.3 - t * 0.7) + Math.sin((x + y) * z + t * 1.1) + Math.sin(Math.hypot(x, y) * z * 2 - t * 2)) / 4; } },
-  tunnel: { z: 1.5, r: 0.5, p: (x, y, t, b) => { const [r, a] = polar(x, y); return Math.sin(1.5 / (r + 0.05) + t * 3 + b * 3) * Math.cos(a * 4 + t + 0.5 / (r + 0.05)); } },
-  kaleido: { z: 1, r: 1, p: (x, y, t, b) => {
-    const [r, a0] = polar(x, y), slice = Math.PI / 3, a = Math.abs((((a0 + t * 0.3) % slice) + slice) % slice - slice / 2); // 6-fold mirror
-    return (Math.sin(r * 10 - t * 4 + b * 6) + Math.sin(a * 12 + r * 4 - t)) / 2;
-  } },
-  spiral: { z: 0.8, r: 2, p: (x, y, t, b) => { const [r, a] = polar(x, y); return Math.sin(a * 3 + r * (8 + b * 6) - t * 3); } },
-  ripple: { z: 0.5, r: 0.3, p: (x, y, t) => Math.sin(Math.hypot(x, y) * 14 - t * 5) * Math.cos(Math.hypot(x - Math.sin(t * 0.7) * 0.5, y - Math.cos(t * 0.5) * 0.5) * 10 + t * 3) },
-  rays: { z: 2, r: -1, p: (x, y, t, b) => { const [r, a] = polar(x, y); return clamp(Math.sin(a * (8 + Math.round(b * 8)) + t * 2) * 2 * (1 - Math.min(1, r)) - 0.2); } },
-  checker: { z: 0.6, r: 1.5, p: (x, y, t, b) => {
-    const [r, a0] = polar(x, y), a = a0 + t * 0.4 + r * 2, s = 4 + b * 4;
-    return clamp(Math.sin(Math.cos(a) * r * s * 3) * Math.sin(Math.sin(a) * r * s * 3) * 2);
-  } },
-  waves: { z: -0.6, r: 0, p: (x, y, t, b) => clamp(1 - Math.min(...[0, 1, 2].map(k => Math.abs(y - Math.sin(x * (3 + k) + t * (2 + k) + k * 2) * (0.25 + b * 0.6)))) * 5) },
-  blobs: { z: 0.4, r: 0.8, p: (x, y, t, b) => {
-    let s = 0;
-    for (let k = 0; k < 4; k++) { const cx = Math.sin(t * (0.6 + k * 0.23) + k) * 0.8, cy = Math.cos(t * (0.5 + k * 0.17) + k * 2) * 0.7; s += (0.02 + b * 0.03) / ((x - cx) ** 2 + (y - cy) ** 2 + 0.001); }
-    return clamp(s - 1);
-  } },
-  flower: { z: 1, r: -1.5, p: (x, y, t, b) => { const [r, a] = polar(x, y); return clamp(1 - Math.abs(r - 0.45 * (0.6 + 0.4 * Math.cos(a * 6 + t)) * (1 + b)) * 6); } },
-  grid: { z: -0.4, r: 0.6, p: (x, y, t, b) => Math.max(Math.cos(x * 12 + Math.sin(y * 3 + t) * (2 + b * 3)), Math.cos(y * 12 + Math.sin(x * 3 - t) * (2 + b * 3))) * 2 - 1 },
-  mandala: { z: 0.7, r: 1, p: (x, y, t, b) => {
-    const [r, a0] = polar(x, y), slice = Math.PI / 4, a = Math.abs((((a0 - t * 0.2) % slice) + slice) % slice - slice / 2); // 8-fold mirror
-    const u = Math.cos(a) * r * 6, v = Math.sin(a) * r * 6;
-    return (Math.sin(u + t) + Math.sin(v * 2 - t * 1.3) + Math.sin((u + v) * (1 + b) + t * 0.7)) / 3;
-  } },
-};
-const ORDER = Object.keys(MODES);
+const sat = v => Math.max(0, Math.min(1, v));
+const fract = x => x - Math.floor(x);
 const hash = s => [...s].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
 
-// The feedback state: brightness and hue per cell, double-buffered.
-let W = 0, H = 0, I, Hu, I2, Hu2, lastT = 0, song;
-let avgBass = 0, cool = 0, kick = 0, flash = 0, turn = 1, mi = 0, since = 0, loud = 0;
-export const mode = () => ORDER[mi];
-const pick = n => { mi = ((n % ORDER.length) + ORDER.length) % ORDER.length; since = 0; flash = 1; };
-export const shift = d => pick(mi + d); // by hand: ] next mode, [ previous
+// The palette (dark to light) as a gradient that goes there and back: any g lands on it, 0 dark, 1 light, 2 dark again.
+function along(pal, g) {
+  const u = 1 - Math.abs((((g % 2) + 2) % 2) - 1), x = u * (pal.length - 1), i = Math.floor(x), j = Math.min(pal.length - 1, i + 1);
+  return pal[i].map((c, k) => c + (pal[j][k] - c) * (x - i));
+}
+const mix = (c, to, f) => c.map((v, k) => v + (to[k] - v) * f);
 
-function step(dt, t, bands, base) {
-  const bass = avg(bands, 0, 6), mid = avg(bands, 6, 19), treb = avg(bands, 19, bands.length);
-  loud += (avg(bands, 0, bands.length) - loud) * Math.min(1, dt * 3);
-  avgBass += (bass - avgBass) * Math.min(1, dt * 2);
-  since += dt;
-  if ((cool -= dt) <= 0 && bass > avgBass * 1.3 + 0.08) { // a beat
-    cool = 0.25; kick = 1; flash = Math.max(flash, 0.6);
-    if (Math.random() < 0.3) turn = -turn;
-    if (since > MIN_MODE && bass > avgBass * 1.8 + 0.15) pick(mi + 1 + Math.floor(Math.random() * (ORDER.length - 1))); // a drop
-  }
-  if (since > MAX_MODE) pick(mi + 1);
-  kick *= Math.exp(-dt * 4); flash *= Math.exp(-dt * 6);
-
-  const m = MODES[ORDER[mi]];
-  const zoom = 1 + dt * m.z * (0.3 + bass * 1.2 + kick * 4), rot = dt * turn * m.r * (0.15 + mid * 2);
-  const decay = Math.exp(-dt * (1.6 - treb * 1.0)), gain = 0.1 + loud * 1.4;
-  for (let j = 0; j < H; j++) {
-    const y = (j - H / 2) / (H / 2);
-    for (let i = 0; i < W; i++) {
-      const x = (i - W / 2) / H, r = Math.hypot(x, y), a = Math.atan2(y, x); // a cell is about twice as tall as wide
-      // where this cell's content was last frame: closer to the center and turned back (more twist near the middle)
-      const ra = a - rot * (1 + Math.max(0, 1 - r)), rr = r / zoom;
-      // bilinear: rounding to the nearest cell would swallow the tiny per-frame zoom and turn, and freeze the picture
-      const px = Math.cos(ra) * rr * H + W / 2 - 0.5, py = Math.sin(ra) * rr * H / 2 + H / 2 - 0.5;
-      const i0 = Math.floor(px), j0 = Math.floor(py), wx = px - i0, wy = py - j0;
-      let v = 0, h = 0, top = -1;
-      for (const [di, dj, wgt] of [[0, 0, (1 - wx) * (1 - wy)], [1, 0, wx * (1 - wy)], [0, 1, (1 - wx) * wy], [1, 1, wx * wy]]) {
-        const si = i0 + di, sj = j0 + dj;
-        if (si < 0 || si >= W || sj < 0 || sj >= H) continue;
-        const c = I[sj * W + si] * wgt;
-        v += c;
-        if (c > top) { top = c; h = Hu[sj * W + si]; } // hues do not average (red + violet is not green): take the strongest
-      }
-      v *= decay; h += dt * 0.08;
-      // the pattern only paints its peaks, so the trails stay visible between them
-      const p = m.p(x, y, t, bass), pi = Math.min(1, Math.max(0, p) ** 2 * gain);
-      if (pi > v) { v = pi; h = base + p * 0.5 + r * 0.3 + t * 0.03; }
-      // the spectrum ring: its radius at each angle is the level of one band, mirrored left/right
-      const k = Math.round(Math.abs(a) / Math.PI * (bands.length - 1));
-      const ring = Math.max(0, 1 - Math.abs(r - (0.15 + bands[k] * 0.7 + kick * 0.1)) * 14) * Math.min(1, bass * 1.5);
-      if (ring > v) { v = ring; h = base + Math.abs(a) / Math.PI * 0.6 + t * 0.05; }
-      I2[j * W + i] = v; Hu2[j * W + i] = h;
-    }
-  }
-  [I, I2, Hu, Hu2] = [I2, I, Hu2, Hu];
+// Smooth 3D value noise, 0..1, and its sum over octaves (fbm). 3D: two dimensions wrap around the tunnel, one goes along it.
+const rnd = (i, j, k, seed) => fract(Math.sin(i * 127.1 + j * 311.7 + k * 74.7 + seed * 13.3) * 43758.5453);
+const ease = f => f * f * (3 - 2 * f);
+function noise(x, y, z, seed) {
+  const i = Math.floor(x), j = Math.floor(y), k = Math.floor(z), u = ease(x - i), v = ease(y - j), w = ease(z - k);
+  const lerp = (a, b, f) => a + (b - a) * f;
+  const plane = kk => lerp(lerp(rnd(i, j, kk, seed), rnd(i + 1, j, kk, seed), u), lerp(rnd(i, j + 1, kk, seed), rnd(i + 1, j + 1, kk, seed), u), v);
+  return lerp(plane(k), plane(k + 1), w);
+}
+function fbm(x, y, z, seed, oct) {
+  let s = 0, amp = 0.5, norm = 0;
+  for (let o = 0; o < oct; o++) { s += amp * noise(x, y, z, seed); norm += amp; x = x * 2.03 + 1.7; y = y * 2.03 + 9.2; z = z * 2.03 + 4.1; amp *= 0.5; }
+  return s / norm;
 }
 
-// h rows of exactly w visible characters. t is the visualizer's own clock (seconds), bands the 0..1 levels, id the
-// song (a new one picks its mode). The same t twice (paused) redraws the last frame without moving it.
-export function frame(w, h, t, bands, accent, id) {
-  if (w !== W || h !== H) { W = w; H = h; [I, Hu, I2, Hu2] = [0, 0, 0, 0].map(() => new Float32Array(w * h)); }
-  if (id && id !== song) { song = id; pick(hash(id)); turn = hash(id) & 1 ? 1 : -1; }
+// A song's own look, the same every time it plays.
+export function look(id = '') {
+  const h = hash(id), pick = (n, k) => Math.floor(h / k) % n;
+  return {
+    seed: h % 1000,
+    fold: [1, 2, 3, 4, 5, 6, 8][pick(7, 1)], // 1: no symmetry
+    twist: (pick(9, 7) - 4) * 0.15,           // how much the tunnel spirals
+    scale: 3 + pick(10, 2521) / 4,             // 3..5.25: how many swirls fit around it
+    turn: pick(2, 31) ? 1 : -1,
+    hue: pick(100, 997) / 100,                 // where on the palette it starts
+  };
+}
+
+// What the visualizer has heard of the song so far.
+let song, L = look(), lastT = 0, ph = 0, travel = 0, push = 0, avgBass = 0, cool = 0, pulse = 0, drift = 0;
+let smooth = null, sEnergy = 0; // the bands and loudness, eased so the picture never jumps
+let beats = [], loudHist = [], histAt = 0, feel = [0.5, 0.5, 0.3];
+export const heard = () => feel; // [tempo, loudness, dynamic range], each 0..1
+
+const median = a => [...a].sort((x, y) => x - y)[a.length >> 1];
+// [tempo (0 = 60 BPM, 1 = 180), loudness, dynamic range] from the beats and loudness of the last seconds
+function listen(t, energy) {
+  const gaps = beats.slice(1).map((b, i) => b - beats[i]).filter(g => g > 0.25 && g < 1.5); // 40..240 BPM
+  const bpm = gaps.length >= 3 ? 60 / median(gaps) : 120;
+  if (t - histAt > 0.1) { histAt = t; loudHist.push(energy); if (loudHist.length > 150) loudHist.shift(); } // 15 s
+  const sorted = [...loudHist].sort((x, y) => x - y), at = f => sorted[Math.floor(f * (sorted.length - 1))] ?? 0;
+  return [sat((bpm - 60) / 120), at(0.5), sat((at(0.9) - at(0.1)) * 2)];
+}
+
+// h rows of exactly w visible characters. t is playback time in seconds (it stops while paused), bands the 0..1 levels,
+// pal the cover's palette (dark to light, at least one color), id the song, energy how loud it really is (0..1): a soft
+// song stays dim and slow even though its bands are scaled up to their own peaks.
+export function frame(w, h, t, bands, pal, id, energy = 1) {
+  if (id && id !== song) { song = id; L = look(id); beats = []; loudHist = []; } // a new song is listened to from scratch
   const dt = Math.max(0, Math.min(0.1, t - lastT));
   lastT = t;
-  if (dt) step(dt, t, bands, hue(accent));
+  // ease towards the sound: up in about 0.15 s, down in about 0.6 s (the raw levels jump every frame and made it flicker)
+  const ease = (from, to) => from + (to - from) * Math.min(1, dt / (to > from ? 0.15 : 0.6));
+  smooth = smooth ? smooth.map((v, i) => ease(v, bands[i] * (0.25 + 0.75 * energy))) : bands.map(() => 0);
+  sEnergy = ease(sEnergy, energy);
+  const B = smooth, band = u => { const x = u * (B.length - 1), i = Math.floor(x), j = Math.min(B.length - 1, i + 1); return B[i] + (B[j] - B[i]) * (x - i); };
+  const bass = avg(B, 0, 6), mid = avg(B, 6, 19);
+  if (dt) {
+    const raw = avg(bands, 0, 6) * (0.25 + 0.75 * energy); // beats need the unsmoothed bass
+    avgBass += (raw - avgBass) * Math.min(1, dt * 2);
+    if ((cool -= dt) <= 0 && raw > avgBass * 1.3 + 0.08) { // a beat: the bass jumps above its recent average
+      cool = 0.25; pulse = energy; push = energy; drift += 0.04 * energy;
+      beats.push(t); if (beats.length > 16) beats.shift();
+    }
+    pulse *= Math.exp(-dt * 1.5); push *= Math.exp(-dt * 3);
+    const target = listen(t, energy);
+    feel = feel.map((f, k) => f + (target[k] - f) * Math.min(1, dt / 3)); // the song's feel, over a few seconds
+    const pace = (0.3 + feel[0] * 0.9) * (0.25 + 0.75 * sEnergy); // faster with the tempo, slower when soft
+    travel += dt * (pace + push * 1.5); // forward through the tunnel, with a surge on each beat
+    ph += dt * pace * 0.3;
+  }
+  const warp = 0.6 + bass * 1.2 + mid * 0.5, sym = sat(0.25 + feel[2] * 1.2), ring = (1 - pulse) * 1.4;
+  const q = c => c.map(n => Math.min(255, Math.round(n)) & 0xf0).join(';'); // shortcut: 16 steps per channel so neighbors share one escape code
   const rows = [];
   for (let j = 0; j < h; j++) {
-    let s = '', last = '';
+    let line = '', last = '';
+    const y0 = (j - h / 2 + 0.5) / (h / 2);
+    // [brightness, flow] of column i
+    const smoke = i => {
+      const x0 = (i - w / 2 + 0.5) / h; // a cell is about twice as tall as wide
+      // the whole picture wobbles on a slow flow of its own (harder with the bass), so it is never a perfect tunnel
+      const wob = 0.5 + bass * 0.6;
+      const X = x0 + (Math.sin(y0 * 2.3 + ph * 0.9 + L.seed) + Math.sin((x0 + y0) * 1.7 - ph * 0.6)) * 0.12 * wob;
+      const Y = y0 + (Math.sin(x0 * 2.1 - ph * 0.7 + L.seed * 0.7) + Math.sin((x0 - y0) * 1.9 + ph * 0.5)) * 0.12 * wob;
+      const r = Math.hypot(X, Y);
+      const depth = -Math.log(Math.max(r, 0.12)) * 1.1; // far in the middle, near at the edges; the middle is a far wall
+      const a = Math.atan2(Y, X) + ph * 0.15 * L.turn + depth * L.twist;
+      // a point on the tunnel wall: around it (a circle, so there is no seam) and along it (depth, moving towards you)
+      let cx = Math.cos(a), cy = Math.sin(a);
+      if (L.fold > 1) { // mirror into fold slices, as strongly as the song's dynamics ask (blended on the circle: blending
+        const sl = Math.PI * 2 / L.fold, f = Math.abs((((a % sl) + sl) % sl) - sl / 2); // angles breaks where they wrap)
+        cx += (Math.cos(f) - cx) * sym; cy += (Math.sin(f) - cy) * sym;
+      }
+      cx *= L.scale; cy *= L.scale;
+      const z = depth + travel;
+      const qx = fbm(cx, cy, z * 0.7 + ph, L.seed, 2); // smoke bent by smoke
+      let v = fbm(cx + warp * qx, cy - warp * qx, z + warp * qx * 0.6, L.seed, 3);
+      v = sat((v - 0.32) * 2.4) ** 1.3; // keep the wisps, drop the haze
+      v *= 0.6 + band(Math.abs(Math.atan2(cy, cx)) / Math.PI) * 0.7; // the spectrum lights it by angle, mirrored like the folds
+      v += 0.3 * pulse * Math.exp(-(((r - ring) * 5) ** 2)); // the beat's ripple
+      return [sat(v * (0.45 + 0.55 * sEnergy)), qx];
+    };
+    // the smoke is smooth, so only every other column is worked out and the ones between are averaged: half the work
+    const S = [], at = i => (S[i] ??= smoke(i));
     for (let i = 0; i < w; i++) {
-      const v = Math.min(1, I[j * w + i] + flash * 0.3 * loud), hh = Hu[j * w + i];
-      // shortcut: colors are rounded to 16 steps so neighbors share one escape code; finer if it ever looks banded
-      const q = c => c.map(n => n & 0xf0).join(';');
-      const col = `38;2;${q(hsv(hh + 0.1, 0.6, Math.min(1, 0.3 + v)))};48;2;${q(hsv(hh, 1, v * 0.6))}`;
-      if (col !== last) { s += `\x1b[${col}m`; last = col; }
-      s += RAMP[Math.min(RAMP.length - 1, Math.floor(v * RAMP.length))];
+      const [v, qx] = i % 2 === 0 || i + 1 >= w ? at(i - (i % 2)) : at(i - 1).map((n, k) => (n + at(i + 1)[k]) / 2);
+      const c = along(pal, L.hue + v * 0.9 + qx * 0.8 + drift);
+      // never black: the background is the palette color dimmed where the smoke is thin, lifted if the cover is very dark
+      let bg = c.map(n => n * (0.4 + v * 0.6));
+      const top = Math.max(...bg);
+      if (top < 70) bg = top ? bg.map(n => n * 70 / top) : [70, 70, 70];
+      const col = `38;2;${q(mix(c, [255, 255, 255], 0.3 + v * 0.5))};48;2;${q(bg)}`;
+      if (col !== last) { line += `\x1b[${col}m`; last = col; }
+      line += RAMP[Math.min(RAMP.length - 1, Math.floor(v * RAMP.length))];
     }
-    rows.push(s + '\x1b[39;49m');
+    rows.push(line + '\x1b[39;49m');
   }
   return rows;
 }

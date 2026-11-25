@@ -43,7 +43,7 @@ const st = {
   stats: { rows: [], totals: [0, 0, 0] }, statCat: 0, period: 0, heard: 0, rawPos: null, statsAt: 0, playDur: 0,
   queue: [], pos: -1, paused: false, loading: false, time: 0, dur: 0, vol: Number(db.getSetting('volume') ?? 100), playId: null,
   direct: new Set(), session: loadSession(),
-  wave: db.getSetting('wave') !== 'off', apos: null, bands: Array(viz.BANDS).fill(0),
+  wave: db.getSetting('wave') !== 'off', apos: null, bands: Array(viz.BANDS).fill(0), energy: 0,
   trip: false, tripT: 0, tripAt: 0, // trip: the psychedelic visualizer inside the full player; tripT its own clock
   shown: '', mq: { key: '', at: 0, step: 0, on: false }, want: '', wantAt: 0, geo: {}, drag: false, lastClick: null,
 };
@@ -630,7 +630,7 @@ const HELP = [
   ['l x a m', 'like · dislike (skips it, trains Discover) · add to queue · more actions'],
   ['d J K', 'in Queue: remove · move down / up'],
   ['v y w q', 'full player · lyrics · visualizer on / off · quit'],
-  ['V [ ]', 'trip: psychedelic visualizer, 12 modes · [ ] change mode (needs w on to follow the music)'],
+  ['V', 'trip: psychedelic visualizer that follows the song (needs w on)'],
   ['D R', 'D discover new songs · R radio from the highlighted song, artist or album'],
   ['t', 'in Stats: week / month / year · ← → songs / artists / albums'],
   ['mouse', 'optional: click · double-click plays · right-click menu · drag the bar to seek'],
@@ -657,10 +657,11 @@ setInterval(() => {
     const next = db ? viz.levels(db, st.bands) : st.bands.map(v => (v > 0.02 ? v * 0.74 : 0));
     need ||= next.some((v, i) => v !== st.bands[i]); // no redraw once everything is still
     st.bands = next;
+    st.energy += ((db ? viz.energy(db) : 0) - st.energy) * 0.15; // smoothed over about a quarter second
   }
-  if (st.full && st.trip) { // its clock runs faster with the bass and stops with the music
+  if (st.full && st.trip) { // its clock is playback time: it stops with the music
     const t = performance.now(), playing = st.pos >= 0 && !st.paused && !st.loading;
-    if (playing) { st.tripT += Math.min(0.1, (t - st.tripAt) / 1000) * (0.6 + 2.5 * st.bands.slice(0, 6).reduce((a, b) => a + b, 0) / 6); need = true; }
+    if (playing) { st.tripT += Math.min(0.1, (t - st.tripAt) / 1000) ; need = true; }
     st.tripAt = t;
   }
   if (st.mq.on && mqStep() !== st.mq.step) need = true;
@@ -743,7 +744,7 @@ function hintList(kind, now) {
   if (st.menu) return [['↑↓', 'move'], ['⏎', 'run'], ['esc', 'close']];
   if (st.lyrics && !st.typing) return [['y', 'close lyrics'], ['l', 'like'], ['x', 'dislike'], ['⏎/space', st.paused ? 'resume' : 'pause'], ['n p', 'next/prev'], ...(lyricsNow()?.plain ? [['↑↓', 'scroll']] : []), ['⇧←→', 'seek'], ['+ -', 'volume'], ['?', 'keys']];
   if (st.typing) return [['⏎', 'search'], ['↑↓', 'history'], ['esc', 'cancel']];
-  if (st.full && st.trip) return [['V', 'close'], ['[ ]', 'mode'], ['v', 'cover'], ['w', `react to music ${st.wave ? 'on' : 'off'}`], ['⏎/space', st.paused ? 'resume' : 'pause'], ['n p', 'next/prev'], ['+ -', 'volume'], ['?', 'keys']];
+  if (st.full && st.trip) return [['V', 'close'], ['v', 'cover'], ['w', `react to music ${st.wave ? 'on' : 'off'}`], ['⏎/space', st.paused ? 'resume' : 'pause'], ['n p', 'next/prev'], ['+ -', 'volume'], ['?', 'keys']];
   if (st.full) return [['l', 'like'], ['x', 'dislike'], ['v', 'close'], ['y', 'lyrics'], ['⏎/space', st.paused ? 'resume' : 'pause'], ['n p', 'next/prev'], ['+ -', 'volume'], ['?', 'keys']];
   const cur = list().data[st.sel];
   kind = typeAt();
@@ -812,8 +813,8 @@ function render() {
     body = frame(t, c, lyricRows(W - 2, L, A), W, A);
     panes.push({ id: 'cover', x0: 1, x1: W });
   } else if (st.full && st.trip) {
-    const [t, c] = titleFor(`Trip · ${trip.mode()}${now ? ` · ${now.title} — ${now.artist}` : ''}${st.wave ? '' : ' · w to react to the music'}`);
-    body = frame(t, c, trip.frame(W - 2, L, st.tripT, st.bands, A, now?.id), W, A);
+    const [t, c] = titleFor(`Trip${now ? ` · ${now.title} — ${now.artist}` : ''}${st.wave ? '' : ' · w to react to the music'}`);
+    body = frame(t, c, trip.frame(W - 2, L, st.tripT, st.bands, got?.palette ?? [A], now?.id, st.energy), W, A);
     panes.push({ id: 'cover', x0: 1, x1: W });
   } else if (st.full) {
     const fp = fullPane(W - 2, L, focus, got);
@@ -1049,7 +1050,6 @@ function onKey(s, k = {}) {
     default:
       if (s === '/') startTyping(); // the only key that searches
       else if (s === '?') st.help = true;
-      else if ((s === ']' || s === '[') && st.full && st.trip) trip.shift(s === ']' ? 1 : -1);
       else if (s === '+' || s === '=') cmd('add', 'volume', 5);
       else if (s === '-') cmd('add', 'volume', -5);
   }

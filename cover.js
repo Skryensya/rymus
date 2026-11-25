@@ -3,7 +3,7 @@ import { spawn } from 'node:child_process';
 
 export const supported = !!process.env.KITTY_WINDOW_ID || /ghostty|wezterm/i.test(process.env.TERM_PROGRAM ?? '') || /kitty|ghostty/.test(process.env.TERM ?? '');
 
-const ready = new Map(); // url -> { b64: base64 PNG, rgb: its most vivid color }
+const ready = new Map(); // url -> { b64: base64 PNG, rgb: its most vivid color, palette: its main colors }
 const busy = new Set();  // loading or failed: never retried this session
 const originals = new Map(); // url -> original image bytes
 const rasters = new Map();   // url|w|h -> rows of colored cells
@@ -19,21 +19,39 @@ const ffmpeg = (img, args) => new Promise((res, rej) => {
   f.stdin.end(img);
 });
 
-// The cover's dominant color: pixels are grouped into 12 hue buckets weighted by saturation × brightness,
-// and the most vivid pixel of the heaviest bucket wins. An average turns most covers into gray, and the single
-// most vivid pixel lets a small red detail beat a cover that is mostly green.
-export function vivid(px) {
-  const total = new Array(12).fill(0), best = new Array(12).fill(null), top = new Array(12).fill(-1);
+// Pixels grouped into 12 hue buckets, each weighted by saturation × brightness: its total, its most vivid pixel, and
+// its weighted average color. Grays have no hue and are left out.
+function buckets(px) {
+  const bs = Array.from({ length: 12 }, () => ({ total: 0, top: -1, best: null, sum: [0, 0, 0] }));
   for (let i = 0; i < px.length; i += 3) {
     const [r, g, b] = [px[i], px[i + 1], px[i + 2]], max = Math.max(r, g, b), d = max - Math.min(r, g, b);
     if (!d) continue;
     const h = max === r ? ((g - b) / d + 6) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4; // 0..6
-    const k = Math.floor(h * 2) % 12, s = d * max;
-    total[k] += s;
-    if (s > top[k]) { top[k] = s; best[k] = [r, g, b]; }
+    const k = bs[Math.floor(h * 2) % 12], s = d * max;
+    k.total += s; k.sum[0] += r * s; k.sum[1] += g * s; k.sum[2] += b * s;
+    if (s > k.top) { k.top = s; k.best = [r, g, b]; }
   }
-  const k = total.indexOf(Math.max(...total));
-  return best[k] ?? [px[0] ?? 0, px[1] ?? 0, px[2] ?? 0];
+  return bs;
+}
+
+// The cover's dominant color: the most vivid pixel of the heaviest hue bucket. An average turns most covers into gray,
+// and the single most vivid pixel lets a small red detail beat a cover that is mostly green.
+export function vivid(px) {
+  const bs = buckets(px), k = bs.reduce((a, b) => (b.total > a.total ? b : a));
+  return k.best ?? [px[0] ?? 0, px[1] ?? 0, px[2] ?? 0];
+}
+
+// The cover's palette for the visualizer: the average color of its up to 4 heaviest hues (a bucket needs 5% of the
+// weight to count), dark to light. A gray cover gives its dark and light grays instead.
+export function palette(px) {
+  const bs = buckets(px), all = bs.reduce((s, b) => s + b.total, 0);
+  const lum = c => c[0] * 0.3 + c[1] * 0.59 + c[2] * 0.11;
+  const cols = bs.filter(b => b.total > all * 0.05).sort((a, b) => b.total - a.total).slice(0, 4).map(b => b.sum.map(v => Math.round(v / b.total)));
+  if (cols.length < 2) { // too few hues: add the cover's shades
+    const byLum = Array.from({ length: px.length / 3 }, (_, i) => [px[3 * i], px[3 * i + 1], px[3 * i + 2]]).sort((a, b) => lum(a) - lum(b));
+    cols.push(byLum[Math.floor(byLum.length * 0.2)], byLum[Math.floor(byLum.length * 0.8)]);
+  }
+  return cols.sort((a, b) => lum(a) - lum(b));
 }
 
 async function load(url) {
@@ -43,7 +61,7 @@ async function load(url) {
     ffmpeg(img, ['-vf', 'scale=400:-1', '-f', 'image2pipe', '-vcodec', 'png']),
     ffmpeg(img, ['-vf', 'scale=16:16:flags=area', '-f', 'rawvideo', '-pix_fmt', 'rgb24']),
   ]);
-  return { b64: png.toString('base64'), rgb: vivid(px) };
+  return { b64: png.toString('base64'), rgb: vivid(px), palette: palette(px) };
 }
 
 // Returns { b64, rgb } if cached; otherwise starts loading and calls onReady when done.

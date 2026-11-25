@@ -139,21 +139,37 @@ const { vivid } = await import('./cover.js');
 const px = (...cs) => Buffer.from(cs.flat());
 assert.deepEqual(vivid(px(...Array(20).fill([90, 150, 70]), [250, 20, 20])), [90, 150, 70]);
 assert.deepEqual(vivid(px([128, 128, 128], [128, 128, 128])), [128, 128, 128]);
+const { palette } = await import('./cover.js');
+assert.deepEqual(palette(px(...Array(15).fill([90, 150, 70]), ...Array(5).fill([200, 30, 30]))), [[200, 30, 30], [90, 150, 70]]); // dark to light
+assert.deepEqual(palette(px(...Array(5).fill([20, 20, 20]), ...Array(5).fill([220, 220, 220]))), [[20, 20, 20], [220, 220, 220]]); // gray: its shades
 console.log('cover ok');
 
-// trip: every row is exactly w visible characters, for every effect, silent or loud
+// trip: every row is exactly w visible characters, silent or loud; the blend follows the song's feel
 const trip = await import('./trip.js');
-const seen = new Set();
+const pal = [[30, 60, 20], [200, 40, 40]];
 let tt = 0;
-for (const _ of Object.keys(trip.MODES)) for (const b of [0, 1]) {
-  const rows = trip.frame(37, 9, tt += 0.05, Array(32).fill(b), [200, 40, 40], 'song-a');
+for (const b of [0, 1]) {
+  const rows = trip.frame(37, 9, tt += 0.05, Array(32).fill(b), pal, 'song-a');
   assert.equal(rows.length, 9);
   for (const r of rows) assert.equal(r.replace(/\x1b\[[\d;]*m/g, '').length, 37);
-  seen.add(trip.mode()); if (b) trip.shift(1);
 }
-assert.equal(seen.size, Object.keys(trip.MODES).length); // ] walks through every mode
-trip.frame(37, 9, tt += 0.05, Array(32).fill(0.5), [200, 40, 40], 'song-b'); const mb = trip.mode();
-trip.frame(37, 9, tt += 0.05, Array(32).fill(0.5), [200, 40, 40], 'song-a'); trip.shift(0);
-trip.frame(37, 9, tt += 0.05, Array(32).fill(0.5), [200, 40, 40], 'song-b');
-assert.equal(trip.mode(), mb); // a song always opens with the same mode
+// listen for 40 s at 25 fps with a bass hit every `gap` seconds; returns the tempo heard (0 = 60 BPM, 1 = 180)
+function listenTo(id, gap, energy) {
+  for (let n = 0; n < 1000; n++) {
+    tt += 0.04;
+    const hit = (tt % gap) < 0.05;
+    trip.frame(20, 6, tt, Array.from({ length: 32 }, (_, k) => (k < 6 ? (hit ? 1 : 0.2) : 0.3)), pal, id, energy);
+  }
+  return trip.heard()[0];
+}
+assert.ok(listenTo('slow', 1.0, 0.3) < 0.1);           // 60 BPM
+assert.ok(Math.abs(listenTo('fast', 0.4, 0.9) - 0.75) < 0.1); // 150 BPM
+assert.deepEqual(trip.look('a'), trip.look('a'));       // a song always looks the same
+assert.notDeepEqual(trip.look('a'), trip.look('b'));    // and different songs differ
 console.log('trip ok');
+
+// energy: absolute loudness, so a soft song stays low even though levels() scales it to its own peaks
+assert.equal(viz.energy(Array(32).fill(-120)), 0);
+assert.equal(viz.energy(Array(32).fill(-10)), 1);
+assert.ok(viz.energy(Array(32).fill(-45)) < 0.5);
+console.log('energy ok');

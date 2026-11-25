@@ -60,3 +60,12 @@ export function levels(db, prev) {
     return Math.max(now, (prev[i] ?? 0) * 0.74);
   });
 }
+
+// How loud the music really is, 0..1: levels() scales every band to its own recent peak, so a soft song ends up
+// looking as loud as a loud one. This sums the bands' raw power instead.
+// shortcut: QUIET and LOUD were picked by reasoning (mastered pop sits near -12 dB), not measured; tune them by ear
+const QUIET = -45, LOUD = -12; // dB
+export function energy(db) {
+  const total = 10 * Math.log10(db.reduce((s, v) => s + 10 ** (v / 10), 0) || 1e-12);
+  return Math.max(0, Math.min(1, (total - QUIET) / (LOUD - QUIET)));
+}
