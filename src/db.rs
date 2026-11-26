@@ -13,8 +13,26 @@ pub fn now_ms() -> i64 {
 
 pub fn default_path() -> PathBuf {
     std::env::var_os("YM_DB").map(PathBuf::from).unwrap_or_else(|| {
-        crate::platform::home_dir().join(".ymus").join("ymus.db")
+        let home = crate::platform::home_dir();
+        let dir = home.join(".rymus");
+        moved(&home.join(".ymus"), &dir);
+        dir.join("rymus.db")
     })
+}
+
+// Before the rename the data lived in ~/.ymus/ymus.db. It moves once to ~/.rymus/rymus.db, and links are left at the
+// old names so the JavaScript version, and anything else that knows the old place, still finds the same data.
+fn moved(old: &std::path::Path, new: &std::path::Path) {
+    let old_is_dir = std::fs::symlink_metadata(old).is_ok_and(|m| m.is_dir()); // a link means it already moved
+    if new.exists() || !old_is_dir || std::fs::rename(old, new).is_err() {
+        return;
+    }
+    for end in ["", "-wal", "-shm"] {
+        // the journal files go with the database, or the last changes are lost
+        let _ = std::fs::rename(new.join(format!("ymus.db{end}")), new.join(format!("rymus.db{end}")));
+    }
+    let _ = std::os::unix::fs::symlink("rymus.db", new.join("ymus.db"));
+    let _ = std::os::unix::fs::symlink(new, old);
 }
 
 pub struct Play {
@@ -376,8 +394,26 @@ impl Db {
 mod tests {
     use super::*;
 
+    #[test]
+    fn the_old_data_folder_moves_once_and_the_old_names_still_work() {
+        let home = std::env::temp_dir().join(format!("rymus-move-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        let (old, new) = (home.join(".ymus"), home.join(".rymus"));
+        std::fs::create_dir_all(old.join("hooks")).unwrap();
+        std::fs::write(old.join("ymus.db"), "data").unwrap();
+        std::fs::write(old.join("ymus.db-wal"), "journal").unwrap();
+        moved(&old, &new);
+        assert_eq!(std::fs::read_to_string(new.join("rymus.db")).unwrap(), "data");
+        assert_eq!(std::fs::read_to_string(new.join("rymus.db-wal")).unwrap(), "journal");
+        assert!(new.join("hooks").is_dir(), "everything in the folder comes along");
+        assert_eq!(std::fs::read_to_string(old.join("ymus.db")).unwrap(), "data", "the old path reaches the same file");
+        moved(&old, &new); // the second run finds it moved and changes nothing
+        assert_eq!(std::fs::read_to_string(new.join("rymus.db")).unwrap(), "data");
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
     pub fn temp_db(name: &str) -> Db {
-        let dir = std::env::temp_dir().join(format!("ymus-{name}-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("rymus-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         Db::open(&dir.join("t.db")).unwrap()
     }

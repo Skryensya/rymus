@@ -1,4 +1,4 @@
-// YouTube Music without an account: the few InnerTube calls ymus needs, parsed from their JSON.
+// YouTube Music without an account: the few InnerTube calls rymus needs, parsed from their JSON.
 use crate::item::{clean, Item, Kind};
 use serde_json::{json, Value};
 use std::time::Duration;

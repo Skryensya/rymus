@@ -32,7 +32,7 @@ mod unix {
     // (mpv's control socket, the visualizer's named pipe) for this process.
     pub fn player_paths() -> (String, String) {
         // shortcut: unix socket paths are capped at ~104 characters on macOS, so /tmp, not the temp dir
-        let base = format!("/tmp/ymus-{}", std::process::id());
+        let base = format!("/tmp/rymus-{}", std::process::id());
         (format!("{base}.sock"), format!("{base}.viz"))
     }
 

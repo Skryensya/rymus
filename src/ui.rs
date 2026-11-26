@@ -133,7 +133,7 @@ pub fn visible(s: &str) -> String {
     out
 }
 
-// Tab bar: [ymus][tab][tab]... as ribbons. Returns the line and the column span of each tab (for the mouse).
+// Tab bar: [rymus][tab][tab]... as ribbons. Returns the line and the column span of each tab (for the mouse).
 pub fn tab_bar(w: usize, tabs: &[(String, &str)], active: usize, accent: Rgb) -> (String, Vec<(usize, usize, usize)>) {
     let sep = glyphs().sep;
     // brand: the " ♫ rymus " label first, left out when even the short tabs do not fit with it; on the narrowest

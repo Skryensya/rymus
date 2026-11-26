@@ -101,7 +101,7 @@ mod tests {
 
     #[test]
     fn choices_default_step_and_wrap() {
-        let dir = std::env::temp_dir().join(format!("ymus-config-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("rymus-config-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let db = Db::open(&dir.join("t.db")).unwrap();
         assert_eq!(value(&db, "fade"), "off");

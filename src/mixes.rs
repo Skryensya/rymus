@@ -18,7 +18,7 @@ fn get_json(url: &str) -> Result<Value, String> {
     let agent = crate::yt::agent();
     let mut attempt = 1;
     loop {
-        match agent.get(url).set("User-Agent", "ymus/2.0").call() {
+        match agent.get(url).set("User-Agent", "rymus/2.0").call() {
             Ok(res) => return res.into_json().map_err(|e| e.to_string()),
             // MusicBrainz is often "busy"
             Err(ureq::Error::Status(503 | 429, _)) if attempt < 3 => thread::sleep(Duration::from_millis(1500 * attempt)),

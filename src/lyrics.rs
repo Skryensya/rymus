@@ -96,7 +96,7 @@ pub fn pick(records: &[Value], duration: f64) -> Lyrics {
 }
 
 fn ask(path: &str, params: &[(&str, &str)]) -> Result<Option<Value>, ()> {
-    let mut req = crate::yt::agent().get(&format!("{API}{path}")).set("User-Agent", "ymus");
+    let mut req = crate::yt::agent().get(&format!("{API}{path}")).set("User-Agent", "rymus");
     for (k, v) in params {
         req = req.query(k, v);
     }

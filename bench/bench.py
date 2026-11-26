@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compare ymus builds: startup, memory, CPU and terminal output. Silent: mpv gets --ao=null, the database is temporary.
+"""Compare rymus builds: startup, memory, CPU and terminal output. Silent: mpv gets --ao=null, the database is temporary.
 
     python3 bench/bench.py ymus ./target/release/rymus
 
@@ -61,7 +61,7 @@ class App:
         except ChildProcessError:
             pass
         # an app stopped while still starting leaves its player behind
-        subprocess.run(["pkill", "-f", f"ymus-{self.pid}.sock"], check=False)
+        subprocess.run(["pkill", "-f", f"rymus-{self.pid}.sock"], check=False)
 
     def ready(self, text=b"Discover"):  # always on Home
         if not self.pump(PATIENCE, text):

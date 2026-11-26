@@ -1,4 +1,4 @@
-// Your own commands, run on what happens in rymus: an executable in `hooks/` next to the database (~/.ymus/hooks/),
+// Your own commands, run on what happens in rymus: an executable in `hooks/` next to the database (~/.rymus/hooks/),
 // named after the event, gets the song as one JSON object on its standard input. rymus knows nothing about what it
 // does. Titles come from outside, so they only ever travel in that JSON, never in a command line.
 //

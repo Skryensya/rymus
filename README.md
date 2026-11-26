@@ -55,7 +55,7 @@ In a small window Home becomes one column, every list keeps its headings in sigh
 
 <sub>These recordings are made with [VHS](https://github.com/charmbracelet/vhs) from the scripts in [`tapes/`](tapes), on a fresh database with made-up history. In a terminal with the kitty graphics protocol (Ghostty, kitty, WezTerm) covers are sharp images; in the recordings they are coloured blocks.</sub>
 
-ymus rewritten in Rust. The original JavaScript version is frozen in the [`js`](https://github.com/Skryensya/rymus/tree/js) branch; both share the database in `~/.ymus`.
+ymus rewritten in Rust. The original JavaScript version is frozen in the [`js`](https://github.com/Skryensya/rymus/tree/js) branch; both share the same data: rymus keeps it in `~/.rymus` and leaves a link at the old `~/.ymus`, which it moves there on its first run.
 
 ## Install
 
@@ -159,7 +159,7 @@ The **EQ** tab (`E`, or `Tab` past Config). On the left the profiles (Flat, Bass
 
 ## Hooks
 
-Run your own commands on what happens. Put an executable in `~/.ymus/hooks/` named after the event:
+Run your own commands on what happens. Put an executable in `~/.rymus/hooks/` named after the event:
 
 | Hook | When | Extra fields |
 |---|---|---|
@@ -185,7 +185,7 @@ For example:
 jq -r '.artist + " - " + .title + " " + .url' >> ~/liked-songs.txt
 ```
 
-Then `chmod +x ~/.ymus/hooks/liked`. Hooks run in the background and are not stopped when you quit. What they print goes to `~/.ymus/hooks.log`, and rymus tells you if one fails.
+Then `chmod +x ~/.rymus/hooks/liked`. Hooks run in the background and are not stopped when you quit. What they print goes to `~/.rymus/hooks.log`, and rymus tells you if one fails.
 
 - Playback hooks only run while `rymus` is open (not while the music plays on after `Q`), and a song on repeat reports its end only when it stops repeating.
 - Importing a playlist, saving a whole queue as one, or deleting a playlist runs nothing.
@@ -193,7 +193,7 @@ Then `chmod +x ~/.ymus/hooks/liked`. Hooks run in the background and are not sto
 
 ## Your data
 
-Likes, history, playlists and settings stay in `~/.ymus/ymus.db`. The services used receive only what a request needs:
+Likes, history, playlists and settings stay in `~/.rymus/rymus.db` (`YM_DB` points it elsewhere). The services used receive only what a request needs:
 
 - **YouTube Music**: your searches and the songs you play or ask recommendations for
 - **Spotify**: the id of a playlist you paste

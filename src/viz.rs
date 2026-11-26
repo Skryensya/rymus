@@ -1,7 +1,7 @@
 // Spectrum analyzer inside mpv's own audio filter. The audio is split into band-pass copies, merged next to the untouched
 // stereo pair as extra channels, measured per channel by astats, and then everything but the original pair is dropped.
 // mpv filters audio well before you hear it, so every measurement is printed with its timestamp (to fd 3, a pipe back to
-// ymus) and drawn only when playback reaches that moment.
+// rymus) and drawn only when playback reaches that moment.
 use std::collections::VecDeque;
 
 pub const BANDS: usize = 32;
