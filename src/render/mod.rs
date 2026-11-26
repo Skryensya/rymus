@@ -21,6 +21,7 @@ mod images;
 mod help;
 mod eq;
 mod config;
+mod viewer;
 mod downloads;
 use help::help_rows;
 pub use help::HELP;
@@ -125,6 +126,9 @@ impl App {
         // 1. Sizes. Rows go to the tab bar (1), search (3, or 1 on a short screen), the body frame, the player and
         //    the hints (1); the body gets what is left.
         let (w, h) = (width_.max(20), height.max(8));
+        if self.viewer.url.is_some() {
+            return self.viewer_screen(w, h);
+        }
         let compact = h < 22; // too short for the framed dock: two plain lines instead
         let r = if h >= 40 && w >= 80 { 8 } else if h >= 30 && w >= 70 { 6 } else { 4 };
         let gap = !compact && h >= 26; // a blank row in the player between the artist and the visualizer

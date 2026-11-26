@@ -7,6 +7,10 @@ impl App {
     pub(super) fn send_images(&mut self, image: Option<(usize, usize, usize)>, head_img: Option<Placed>, shown_url: &str, got: Option<Arc<Got>>) -> String {
     // real cover image: only re-sent when it changes; the old one stays until the new one has loaded
     let mut img = String::new();
+    if !self.viewer.shown.is_empty() {
+        img.push_str(&cover::delete(3)); // the viewer just closed
+        self.viewer.shown.clear();
+    }
     if !self.kitty && !self.shown.is_empty() {
         img.push_str(&cover::delete(1)); // pixel art was just turned on
         self.shown.clear();

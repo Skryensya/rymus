@@ -47,6 +47,7 @@ pub use filter::Filter;
 pub use extras::{Sleep, Undo};
 pub use search::{Found, KINDS};
 pub use equalizer::EqView;
+pub use media::Viewer;
 #[cfg(test)]
 pub use data::WIPE_WORD;
 
@@ -200,6 +201,7 @@ pub struct Geo {
     pub links: Vec<(Action, usize, usize, usize)>, // names in the players that open their page: (it, x0, x1, y)
     pub body: usize,
     pub window: Option<(usize, usize, usize, usize)>, // the equalizer's window: (x0, x1, y0, y1)
+    pub images: Vec<(usize, usize, usize, usize, String)>, // covers on screen: (x0, x1, y0, y1, url); Shift+click shows one big
 }
 
 // The player's buttons.
@@ -376,6 +378,7 @@ pub struct App {
     pub theme: crate::theme::Theme, // the accent color and its change from one song to the next
     pub help: bool,
     pub eq: EqView, // the EQ tab
+    pub viewer: Viewer, // a cover, big (Shift+click)
     pub detach: bool, // quit leaving the music playing
     pub restart: bool, // and start again at once: the way to pick up a new build
     pub help_scroll: usize,
@@ -515,7 +518,7 @@ impl App {
         App {
             db, db_path, yt: Yt::new(), tx, mpv, feed, quit: false, clear_screen: false,
             tab: Tab::Home, prev_tab: Tab::Home, typing: false, buf: String::new(), history_at: None, history: vec![], draft: String::new(),
-            msg: String::new(), note: String::new(), note_until: None, busy: String::new(), help: false, eq: EqView::default(), detach: false, restart: false, help_scroll: 0, full: false, menu: None,
+            msg: String::new(), note: String::new(), note_until: None, busy: String::new(), help: false, eq: EqView::default(), viewer: Viewer::default(), detach: false, restart: false, help_scroll: 0, full: false, menu: None,
             lyrics: false, lyric_scroll: 0, karaoke: false, lyric_scrolled: None, lyric_line: None, lyric_dots: None, karaoke_style,
             items: vec![], title: String::new(), numbered: false, back: vec![], head: None, query: String::new(), list_id: 0, next_id: 1,
             home_left: vec![], home_right: vec![], home_titles: Default::default(), home_wide: true, home_focus: PaneId::Left, home_sel: [0, 0],

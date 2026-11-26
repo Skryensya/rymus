@@ -161,6 +161,9 @@ impl App {
         let lw = album.as_ref().map_or(iw, |_| iw - (2 * r + 2));
         let songs = data.iter().filter(|t| t.kind == Kind::Track).count();
         let liked = songs > 0 && data.iter().filter(|t| t.kind == Kind::Track).all(|t| self.likes.contains(&t.id) || self.dislikes.contains(&t.id));
+        if let Some(al) = &album {
+            g.images.push((lw + 3, lw + 2 + 2 * r, g.top, g.top + r - 1, al.cover.clone())); // the cover, c = 2r wide
+        }
         let side = album.map(|al| self.album_side(&al, songs, liked, l, r, g.top, lw + 3, head_img)); // border, list, space
         let mut links = vec![];
         let list = self.list_rows(mq, &data, sel, top, lw, l, true, a, playing, empty, &mut links);

@@ -539,7 +539,7 @@ quit,salir
 "quit, music stays","salir, la música sigue"
 ctrl R,
 restart,reiniciar
-mouse: click · double-click plays · right-click menu · drag the bar to seek,mouse: clic · doble clic reproduce · clic derecho menú · arrastra la barra para avanzar
+mouse: click · double-click plays · right-click menu · drag the bar to seek · shift-click a cover to see it big,mouse: clic · doble clic reproduce · clic derecho menú · arrastra la barra para avanzar · shift-clic en una portada la muestra en grande
 close,cerrar
 resume,continuar
 pause,pausar
@@ -720,3 +720,5 @@ visualizer style,estilo del visualizador
 General,General
 Config · ↑ ↓ section · → open it,Ajustes · ↑ ↓ sección · → abrirla
 Config · ↑ ↓ choose · ← → change · esc sections,Ajustes · ↑ ↓ elegir · ← → cambiar · esc secciones
+Loading the cover…,Cargando la portada…
+Cover · Esc or a click closes,Portada · Esc o un clic la cierra

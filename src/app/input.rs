@@ -137,6 +137,20 @@ impl App {
             M::Moved | M::ScrollLeft | M::ScrollRight => return false,
             _ => {}
         }
+        // the cover viewer: any click closes it
+        if self.viewer.url.is_some() {
+            if matches!(e.kind, M::Down(_)) {
+                self.close_viewer();
+            }
+            return true;
+        }
+        // Shift+click on a cover shows it big
+        if e.kind == M::Down(MouseButton::Left) && e.modifiers.contains(KeyModifiers::SHIFT) && !self.help && self.menu.is_none() {
+            if let Some(url) = self.geo.images.iter().find(|i| x >= i.0 && x <= i.1 && y >= i.2 && y <= i.3).map(|i| i.4.clone()) {
+                self.open_viewer(url);
+                return true;
+            }
+        }
         if self.help {
             if matches!(e.kind, M::Down(_)) {
                 self.help = false;
@@ -327,6 +341,9 @@ impl App {
                 return self.toggle_pause();
             }
             code = KeyCode::Enter;
+        }
+        if self.viewer.url.is_some() {
+            return self.close_viewer(); // any key but space (it plays and pauses, above)
         }
         if self.help && !ctrl && code != KeyCode::Char('/') {
             match code {

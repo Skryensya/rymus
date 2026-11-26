@@ -145,3 +145,21 @@ impl App {
 fn stale(l: &Lyrics, id: &str, db: &crate::db::Db) -> bool {
     *l == Lyrics::None && db.lyrics_age(id).is_some_and(|age| age > std::time::Duration::from_secs(30 * 86_400))
 }
+
+// The cover viewer (Shift+click on a cover): the image as large as the terminal can show it, over everything.
+#[derive(Default)]
+pub struct Viewer {
+    pub url: Option<String>, // the cover shown, while open
+    pub shown: String,       // what the terminal has as image 3: kitty images stay until deleted
+}
+
+impl App {
+    pub(super) fn open_viewer(&mut self, url: String) {
+        if !url.is_empty() {
+            self.viewer.url = Some(url);
+        }
+    }
+    pub(super) fn close_viewer(&mut self) {
+        self.viewer.url = None;
+    }
+}

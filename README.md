@@ -202,6 +202,8 @@ The keyboard's play/pause, next and previous keys, AirPods, and the system's Now
 
 In the player and in lists (search results, Stats, Home, queue and the rest), names are underlined links: an artist or album opens its page with one click. In the player you can also press `o` for the playing song's album and `O` for its artist.
 
+**Shift+click on a cover** (the player's, the full player's, an album or artist page's) shows it as large as the terminal can, with a margin around it. In Ghostty, kitty and WezTerm it is the real image at its sharpest (the 1200 px copy when YouTube has one); elsewhere it is drawn in half blocks. `Esc`, any other key or a click closes it; space still plays and pauses. Some terminals keep Shift+click for selecting text: there it may need the terminal's own setting to pass it on.
+
 ## Finding things
 
 - `f` narrows the list you are on (Liked, Library, queue, history, playlists, pages) as you type; `Enter` keeps it, `Esc` clears it.

@@ -15,6 +15,9 @@ impl App {
         let r = if show { c.div_ceil(2) } else { 0 };
         let pad_l = iw.saturating_sub(c) / 2;
         let geo = (show && self.kitty).then_some((top, 2 + pad_l, c));
+        if show {
+            g.images.push((2 + pad_l, 1 + pad_l + c, top, top + r - 1, url.clone()));
+        }
         let art = match got {
             Some(got) if show && !self.kitty => self.cells(&url, got, c, r),
             _ => None,
@@ -141,6 +144,9 @@ impl App {
         g.bar_x0 = first_x - 1 + cw + left.len();
         g.bar_w = bw;
         g.thumb = thumb.then_some((3, 2 + c, first, first + r - 1));
+        if thumb {
+            g.images.push((3, 2 + c, first, first + r - 1, url.clone()));
+        }
         // without buttons, a click on the title line plays or pauses
         g.now_row = if buttons { 0 } else { first };
         let middle = if self.wave && now.is_some() { spectrum(&self.bands, tx, r - 3, a, self.viz_style) } else { vec![blank.clone(); r - 3] };

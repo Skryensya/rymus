@@ -113,7 +113,7 @@ pub const HELP: [Section; 7] = [
     ("Views", &[("v", "full player"), ("V", "trip · [ ] scene · . hold"), ("y", "lyrics"), ("Y", "karaoke · f letters"), ("w", "visualizer style"), ("W", "visualizer on / off"), ("E", "equalizer")]),
     ("More", &[("D", "discover"), ("z", "sleep timer"), ("u", "undo"), ("← → t", "Stats, Liked views"), ("q", "quit"), ("Q", "quit, music stays"), ("ctrl R", "restart")]),
 ];
-const MOUSE: &str = "mouse: click · double-click plays · right-click menu · drag the bar to seek";
+const MOUSE: &str = "mouse: click · double-click plays · right-click menu · drag the bar to seek · shift-click a cover to see it big";
 
 // The sections laid out in as many columns as fit, each section going to the shortest column; rows are exactly w wide.
 pub(super) fn help_rows(w: usize, a: Rgb) -> Vec<String> {

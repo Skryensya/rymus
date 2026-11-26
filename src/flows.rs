@@ -2269,3 +2269,28 @@ fn freeing_nearly_all_downloads_asks_for_the_phrase() {
     ui.key(KeyCode::Enter);
     assert!(!file.exists() && !ui.app.downloaded("s1"), "the phrase frees them");
 }
+
+#[test]
+fn shift_click_on_a_cover_shows_it_big_and_any_click_or_key_closes_it() {
+    let mut ui = Ui::new();
+    ui.size = (120, 34);
+    ui.play_a_result();
+    ui.app.queue[0].cover = "test://cover".into(); // the test songs have none
+    ui.screen();
+    let (x0, _, y0, _, url) = ui.app.geo.images.first().cloned().expect("the player's cover is a spot on screen");
+    assert!(!url.is_empty());
+    ui.click(x0, y0); // a plain click is still play / pause
+    assert!(ui.app.viewer.url.is_none());
+    let shift = MouseEvent { kind: MouseEventKind::Down(MouseButton::Left), column: x0 as u16 - 1, row: y0 as u16 - 1, modifiers: KeyModifiers::SHIFT };
+    ui.app.handle(Msg::Mouse(shift));
+    assert_eq!(ui.app.viewer.url.as_deref(), Some(url.as_str()));
+    let screen = ui.screen();
+    assert!(ui.shows("Cover · Esc or a click closes") && ui.shows("Loading the cover…"), "{}", screen.join("\n"));
+    assert!(screen.iter().all(|r| crate::ui::width(r) == 120), "every row as wide as the screen");
+    ui.click(5, 5);
+    assert!(ui.app.viewer.url.is_none(), "a click closes it");
+    ui.app.handle(Msg::Mouse(shift));
+    ui.key(KeyCode::Esc);
+    assert!(ui.app.viewer.url.is_none(), "a key closes it");
+    assert!(!ui.shows("Cover · Esc"));
+}
