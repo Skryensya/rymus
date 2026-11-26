@@ -14,7 +14,7 @@ Sleep 3s
 Down@300ms 12
 Sleep 2s
 # Stats, narrow
-Tab@600ms 4
+Tab@400ms 6
 Sleep 3s
 
 Hide

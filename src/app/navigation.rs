@@ -222,6 +222,7 @@ impl App {
             Action::OpenDownloads => self.open_downloads(),
             Action::PickDownloads(i) => self.downloads.sel = i,
             Action::FreeSpace(ids) => self.free_space(ids),
+            Action::ConfirmFreeSpace(ids) => self.start_naming(Naming::FreeAll(ids), String::new()),
             Action::DownloadFolder => {
                 let now = self.db.get_setting("dlfolder").filter(|f| !f.is_empty()).unwrap_or_else(|| "~/Music/rymus".into());
                 self.start_naming(Naming::Folder, now);

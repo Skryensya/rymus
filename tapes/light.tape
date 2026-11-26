@@ -11,6 +11,8 @@ Type "/"
 Type "daft punk"
 Enter
 Sleep 4s
+Left
+Sleep 500ms
 Enter
 Sleep 4s
 Down 2
@@ -33,7 +35,8 @@ Type "/"
 Type "rumours fleetwood mac"
 Enter
 Sleep 4s
-Down@200ms 3
+Right
+Sleep 500ms
 Enter
 Sleep 4s
 Enter

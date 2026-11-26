@@ -233,7 +233,7 @@ fn only_shift_arrows_seek() {
     assert!(ui.told().iter().all(|c| c[0] != "seek"));
     ui.press(KeyCode::Right, KeyModifiers::SHIFT);
     ui.press(KeyCode::Left, KeyModifiers::SHIFT);
-    assert_eq!(ui.told(), [json!(["seek", 10]), json!(["seek", -10])]);
+    assert_eq!(ui.told(), [json!(["seek", 5]), json!(["seek", -5])]);
 }
 
 #[test]
@@ -2157,6 +2157,8 @@ fn downloads_run_their_hooks_from_start_to_deletion() {
     ui.app.ask_free_space(100);
     ui.key(KeyCode::Down);
     ui.key(KeyCode::Enter);
+    ui.text("delete my downloads"); // all of them: the phrase is asked for
+    ui.key(KeyCode::Enter);
     let gone = got(&mut ui, "download-deleted", 1);
     assert_eq!((gone[0]["id"].as_str(), gone[0]["reason"].as_str()), (Some("s1"), Some("free up space")));
     assert!(gone[0]["bytes"].as_u64().unwrap() > 0 && gone[0]["path"].as_str().unwrap().ends_with(".mp3"));
@@ -2179,4 +2181,47 @@ fn a_song_of_your_own_tells_hooks_its_path_not_a_url() {
     let liked = got(&mut ui, "liked", 1);
     assert!(liked[0]["url"].is_null(), "{liked:?}");
     assert_eq!(liked[0]["path"], song.to_string_lossy().as_ref());
+}
+
+#[test]
+fn a_downloaded_song_reads_its_lyrics_from_the_file_beside_it() {
+    let mut ui = Ui::new();
+    ui.app.start();
+    ui.search("band");
+    ui.ch('b');
+    ui.wait("the file", |ui| ui.app.downloaded("s1"));
+    let file = ui.app.downloads.files["s1"].clone();
+    std::fs::write(file.with_extension("lrc"), "[00:01.00]from the file\n[00:04.00]second line\n").unwrap();
+    ui.key(KeyCode::Enter); // play it
+    ui.property("duration", json!(200.0));
+    ui.ch('y');
+    ui.app.want_lyrics();
+    match ui.app.lyrics_ready() {
+        Some(crate::lyrics::Lyrics::Synced(lines)) => assert_eq!(lines[0].1, "from the file"),
+        other => panic!("expected the file's lyrics, got {:?}", other.is_some()),
+    }
+}
+
+#[test]
+fn freeing_nearly_all_downloads_asks_for_the_phrase() {
+    let mut ui = Ui::new();
+    ui.app.start();
+    ui.search("band");
+    ui.ch('b');
+    ui.wait("the file", |ui| ui.app.downloaded("s1"));
+    let file = ui.app.downloads.files["s1"].clone();
+    ui.app.free_cut("100");
+    ui.key(KeyCode::Down); // past "Keep them"
+    ui.key(KeyCode::Enter);
+    assert!(file.exists(), "one Enter deletes nothing at 100 %");
+    assert!(ui.shows("⚠ This deletes nearly all your downloads"), "{}", ui.screen().join("\n"));
+    ui.text("yes");
+    ui.key(KeyCode::Enter);
+    assert!(file.exists() && ui.app.downloaded("s1"), "the wrong words keep them");
+    ui.app.free_cut("100");
+    ui.key(KeyCode::Down);
+    ui.key(KeyCode::Enter);
+    ui.text("delete my downloads");
+    ui.key(KeyCode::Enter);
+    assert!(!file.exists() && !ui.app.downloaded("s1"), "the phrase frees them");
 }

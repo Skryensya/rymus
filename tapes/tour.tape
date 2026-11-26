@@ -1,4 +1,4 @@
-# The first impression: search, an artist's page, play a song, the big player.
+# The first impression: a search in tabs, an artist's page, play a song, the big player.
 Output docs/tour.gif
 Source tapes/style.tape
 
@@ -14,7 +14,10 @@ Sleep 300ms
 Type "daft punk"
 Sleep 500ms
 Enter
-Sleep 4s
+Sleep 2.5s
+# the songs tab, then ← to the artists
+Left
+Sleep 1.5s
 # the first artist found (its picture loads while hidden)
 Enter
 Sleep 1.5s

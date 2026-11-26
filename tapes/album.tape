@@ -14,10 +14,10 @@ Sleep 300ms
 Type "rumours fleetwood mac"
 Sleep 500ms
 Enter
-Sleep 4s
-# past the artists, onto the album
-Down@400ms 3
-Sleep 800ms
+Sleep 2.5s
+# the Albums tab: the album is the first one
+Right
+Sleep 1.5s
 Enter
 Sleep 4s
 # Shuffle

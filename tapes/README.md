@@ -16,5 +16,6 @@ for t in tapes/*.tape; do [ "$t" = tapes/style.tape ] || vhs "$t"; done   # all 
   `Down` count.
 - `light.tape` saves the light-mode stills `docs/look-light*.png`, on a light terminal theme. `DEMO_SET="mode=light accent=teal"` before `tapes/demo.sh` starts with those settings.
 - `looks.tape` also saves the three stills `docs/look-*.png` (VHS `Screenshot`).
-- `trip.tape` is not in the README yet: the visualizer is being rebuilt. Record it once it is done.
+- `trip.tape` is not in the README: the trip moves too much for a small GIF.
+- Tabs are reached with `Tab` presses (Home, Playlists, Liked, Library, Queue, History, Stats, Config): a new tab shifts the counts.
 - VHS cannot show real images, so covers appear as coloured blocks, the same as "Pixel art covers" in Config.

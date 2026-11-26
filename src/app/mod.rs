@@ -125,6 +125,7 @@ pub enum Action {
     AskDeleteDownload(Item),
     DeleteDownload(String),
     FreeSpace(Vec<String>),
+    ConfirmFreeSpace(Vec<String>), // 90 % or more: asks for a typed phrase first
     OpenDownloads,
     PickDownloads(usize),
     DownloadLiked,
@@ -143,6 +144,7 @@ pub enum Naming {
     Filter,
     Folder, // where downloads go
     FreeCut, // the share of downloads Free up space deletes
+    FreeAll(Vec<String>), // the phrase that confirms freeing 90 % or more: those downloads
     Export, // the file to write a copy of your data to
     Import, // the file to read your data back from
     Wipe,   // the word that confirms deleting everything

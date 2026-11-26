@@ -515,8 +515,8 @@ impl App {
             K::Char('n') => self.cmd(json!(["playlist-next"])),
             K::Char('p') => self.cmd(json!(["playlist-prev"])),
             // plain arrows never move the song
-            K::Left if shift => self.cmd(json!(["seek", -10])),
-            K::Right if shift => self.cmd(json!(["seek", 10])),
+            K::Left if shift => self.cmd(json!(["seek", -5])),
+            K::Right if shift => self.cmd(json!(["seek", 5])),
             K::Left if self.tab == Tab::Home => self.focus_home(PaneId::Left),
             K::Right if self.tab == Tab::Home => self.focus_home(PaneId::Right),
             K::Char('l') => match self.album_at() {

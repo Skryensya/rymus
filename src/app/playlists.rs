@@ -48,6 +48,7 @@ impl App {
         match naming {
             Naming::Filter => {} // applied as it is typed
             Naming::FreeCut => return self.free_cut(&name),
+            Naming::FreeAll(ids) => return self.free_all(ids, &name),
             Naming::Folder => {
                 self.db.set_setting("dlfolder", &name);
                 self.settings = config::rows(&self.db);

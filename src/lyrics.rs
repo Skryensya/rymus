@@ -14,6 +14,34 @@ pub enum Lyrics {
     Error,
 }
 
+// Lyrics as a file beside a song, the way other players read them: "Song.lrc" when synced, "Song.txt" when not.
+pub fn save_beside(audio: &std::path::Path, l: &Lyrics) -> bool {
+    let (ext, text) = match l {
+        Lyrics::Synced(lines) => {
+            let stamp = |t: f64| format!("[{:02}:{:05.2}]", (t / 60.0) as u64, t % 60.0);
+            ("lrc", lines.iter().map(|(t, line)| format!("{}{line}\n", stamp(*t))).collect::<String>())
+        }
+        Lyrics::Plain(lines) => ("txt", lines.join("\n") + "\n"),
+        _ => return false, // nothing worth a file
+    };
+    std::fs::write(audio.with_extension(ext), text).is_ok()
+}
+// The lyrics saved beside a song (or that came with your own music), if there are any.
+pub fn beside(audio: &std::path::Path) -> Option<Lyrics> {
+    if let Ok(text) = std::fs::read_to_string(audio.with_extension("lrc")) {
+        let lines = parse_lrc(&text);
+        if !lines.is_empty() {
+            return Some(Lyrics::Synced(lines));
+        }
+    }
+    let text = std::fs::read_to_string(audio.with_extension("txt")).ok()?;
+    let lines: Vec<String> = text.lines().map(str::to_string).collect();
+    (!lines.is_empty()).then_some(Lyrics::Plain(lines))
+}
+pub fn has_beside(audio: &std::path::Path) -> bool {
+    audio.with_extension("lrc").is_file() || audio.with_extension("txt").is_file()
+}
+
 // How lyrics are kept on disk (db::lyrics_*): the answer as JSON. An error is never kept, so it is asked again.
 pub fn to_json(l: &Lyrics) -> Option<String> {
     let v = match l {
@@ -160,6 +188,24 @@ pub fn fetch(track: &Item, duration: f64) -> Lyrics {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn lyrics_files_beside_a_song() {
+        let dir = std::env::temp_dir().join(format!("rymus-lrc-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let song = dir.join("Band - Hit [abc].mp3");
+        assert!(beside(&song).is_none() && !has_beside(&song));
+        let synced = Lyrics::Synced(vec![(1.5, "first".into()), (65.25, "second".into())]);
+        assert!(save_beside(&song, &synced));
+        assert_eq!(std::fs::read_to_string(dir.join("Band - Hit [abc].lrc")).unwrap(), "[00:01.50]first\n[01:05.25]second\n");
+        assert!(beside(&song) == Some(synced) && has_beside(&song));
+        let other = dir.join("Other.m4a");
+        assert!(save_beside(&other, &Lyrics::Plain(vec!["a".into(), "b".into()])));
+        assert!(beside(&other) == Some(Lyrics::Plain(vec!["a".into(), "b".into()])));
+        assert!(!save_beside(&other, &Lyrics::Instrumental) && !save_beside(&other, &Lyrics::Error));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn karaoke_dots_fill_in_equal_steps() {

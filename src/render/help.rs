@@ -104,7 +104,7 @@ impl App {
 // The ? page: short entries under a few headings, so a key is found by looking, not reading.
 pub type Section = (&'static str, &'static [(&'static str, &'static str)]);
 pub const HELP: [Section; 7] = [
-    ("Playback", &[("space", "play / pause"), ("n  p", "next / previous"), ("r", "repeat: queue, song, off"), ("⇧← ⇧→", "seek 10 s"), ("+  -", "volume")]),
+    ("Playback", &[("space", "play / pause"), ("n  p", "next / previous"), ("r", "repeat: queue, song, off"), ("⇧← ⇧→", "seek 5 s"), ("+  -", "volume")]),
     ("Move", &[("↑ ↓", "move"), ("⏎ ⇧space", "open / play"), ("esc", "back, then Home"), ("tab", "next section"), ("← →", "Home column")]),
     ("Song", &[("a", "add to queue"), ("m", "play next, more…"), ("l", "like song or album"), ("x", "dislike"), ("s", "save to playlist"), ("R", "radio"), ("o  O", "playing: album, artist"), ("F", "follow artist"), ("b", "download"), ("B", "downloads and your music")]),
     ("Queue & playlists", &[("d", "remove / delete"), ("J  K", "move in queue"), ("c", "clear the queue"), ("m", "rename, play")]),

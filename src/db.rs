@@ -519,6 +519,13 @@ impl Db {
         self.save_track(t);
         self.exec("INSERT OR REPLACE INTO downloads VALUES(?,?,?)", params![t.id, file.to_string_lossy(), now_ms()]);
     }
+    // The downloads (rymus's own, not your music) whose song is known, for filling in what they lack.
+    pub fn download_files(&self) -> Vec<(Item, std::path::PathBuf)> {
+        self.c
+            .prepare("SELECT t.*, d.path FROM downloads d JOIN tracks t ON t.id = d.id")
+            .and_then(|mut s| s.query_map([], |r| Ok((track(r)?, std::path::PathBuf::from(r.get::<_, String>("path")?))))?.collect())
+            .unwrap_or_default()
+    }
     pub fn downloads(&self) -> Vec<(String, std::path::PathBuf)> {
         self.c
             .prepare("SELECT id, path FROM downloads")

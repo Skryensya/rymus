@@ -1,43 +1,44 @@
 # rymus
 
-**YouTube Music in your terminal.** Search, play, read along, and see what you listen to — without an account, without a browser tab, without leaving the keyboard.
+**rymus** is **R**ust **Y**ouTube **Mu**sic, with an **s** on the end.
 
-![rymus: searching an artist, playing a song, the big player](docs/tour.gif)
+I wanted to listen to YouTube Music from the terminal I already live in: no browser tab, no account, no ads, and my own likes and history kept on my computer. Nothing out there did quite what I wanted, so I wrote this. It is a tool for my own use, built around how I listen, and it changes whenever I want something different. It is public in case it is useful to someone else, but it is not a product: there is no roadmap, no support promise, and things move around.
 
-## Why rymus
+![rymus: a search in tabs, an artist's page, a song playing, the big player](docs/tour.gif)
 
-- **Nothing to sign in to.** It uses YouTube Music anonymously. Your likes, playlists and history live in one file on your computer; the services it talks to get only what each request needs (see [Your data](#your-data)).
-- **Light.** A single small binary drawing text, with `mpv` playing the music. No browser, no Electron, no ads, no video eating your battery.
-- **Made for the keyboard.** Every action is one key away, and the bar at the bottom always says which keys work right now. The mouse works too.
-- **Yours.** Dark or light, a fixed color or the cover's, the player on top or below, ten border styles (one ornate, in ASCII).
-- **It looks good in any terminal size.** From a small split pane to a full screen, every view rearranges itself instead of breaking.
-- **It learns from you, and tells you.** Discover and the radio rank new songs by your own listening; Stats shows the minutes, not a mystery score.
-- **More than a player.** Synced lyrics, karaoke, album and artist pages, a This is … playlist for any artist, crossfade, loudness levelling, a spectrum visualizer and a psychedelic one.
+## What it does for me
+
+- **Plays YouTube Music without signing in.** Searches, albums, artists and radios come from YouTube Music anonymously; `mpv` and `yt-dlp` do the playing. My likes, playlists and history live in one SQLite file (see [Your data](#your-data)).
+- **Stays on the keyboard.** Every action is a key, the bottom line says which keys work right now, `?` lists them all and `:` finds any command by name. The mouse works too.
+- **Keeps what I like.** Liked songs, liked albums (saved in Library), artists I follow with their new releases, playlists (also imported from a Spotify or YouTube link), and downloads to listen offline.
+- **Shows what I actually listen to.** Stats counts minutes, not plays; History lists every song by day; Discover and the radio rank new songs by my own listening.
+- **The extras I wanted.** Synced lyrics and karaoke, an equalizer, crossfade, mono, a sleep timer, a full screen visualizer after the Windows Media Player ones, hooks to run my own scripts, and English or Spanish (or any language added with a CSV).
+- **Fits whatever pane I give it.** From a narrow split to a full screen, light or dark terminal.
 
 ## What it looks like
 
-### Albums: the cover beside the songs
-Open an album and its songs are on the left, the cover and details on the right. ▶ Play album plays it in order, ⤮ Shuffle in any order.
+### Search, artists and albums
+Results come in tabs (songs, albums, artists) ordered by what I typed. An album page has its songs on the left and the cover on the right; ▶ Play album plays it in order, ⤮ Shuffle in any order.
 
 ![An album page with Play album and Shuffle](docs/album.gif)
 
 ### Lyrics and karaoke
-`y` shows the lyrics, highlighting the line being sung; scroll ahead with `↑` `↓` and they come back to the song on their own. `Y` turns them into karaoke: the line being sung in big letters, the ones around it small, and four dots that fill up until the next line. `f` changes the letters: dots (braille), solid, or big blocks.
+`y` shows the lyrics, following the line being sung; `↑` `↓` scroll ahead and they come back on their own. `Y` turns them into karaoke: the sung line in big letters (`f` changes their style), the lines around it small, and four dots that fill up until the next one.
 
 ![Lyrics following the song, then karaoke](docs/lyrics.gif)
 
 ### Home and Stats
-Home puts what to play (resume, Discover, up next, recently played) beside your library (playlists, top artists, recent searches). Stats ranks songs, artists and albums by the minutes you actually listened, with a chart of each day and of the hours you listen at.
+Home puts what to play next to my library. Stats ranks songs, artists and albums by the minutes I really listened, with a chart per day and per hour.
 
 ![Home, then Stats with charts](docs/stats.gif)
 
-### Settings that matter, nothing more
-Crossfade, even out loudness, a data saver, pixel art covers — each changed with `←` `→` and kept for next time.
+### Config
+A short list of settings, each changed with `←` `→` (or a click) and kept: the language, crossfade, loudness, mono, the equalizer (a window of its own), data saver, the look.
 
-![The Config tab](docs/config.gif)
+![The Config tab, the language and the equalizer](docs/config.gif)
 
-### Make it yours
-There is a light mode for terminals with a light background, where every color is chosen to read on it. The accent can follow the cover of what plays, or be one of 13 fixed colors. The player can sit under the lists or above them, and the frames can be rounded, square, heavy, double, dashed, dotted, deco, block, plain ASCII, or ornate (scrolls along the edges and curls down the sides, in plain ASCII). All of it is in Config, under Look, and changes the moment you press `←` `→`.
+### The look
+Dark or light mode, the accent from the cover or a fixed color, the player above or below the lists, and ten kinds of frame (one of them ornate, in plain ASCII). All in Config, under Look.
 
 ![Changing the color, the player's place and the borders in Config](docs/looks.gif)
 
@@ -50,20 +51,20 @@ There is a light mode for terminals with a light background, where every color i
 | ![Light mode on a light terminal](docs/look-light.png) | ![Light mode with a teal accent, the player above, square frames](docs/look-light-teal.png) |
 
 ### Any size
-In a small window Home becomes one column, every list keeps its headings in sight, and nothing spills over the edges.
+In a small window Home becomes one column and every list keeps its headings in sight.
 
 ![rymus in a small window](docs/narrow.gif)
 
-### And for fun
-`V` opens a full screen visualizer that moves with the music, after the Windows Media Player visualizations people remember: Battery's endless feedback tunnels, Alchemy's shapes that turn into each other, Ambience's slow clouds, and the classic bars and waves. Twelve scenes with odd names ("my tornado is resting", "spider in the bathtub"). Each song opens on its own scene and moves to another on its strong moments, never in its first 15 s and at most every 30 s. `[` `]` change the scene, `.` holds it, `y` shows the sung line. It never flashes.
+### The trip
+`V` opens a full screen visualizer that moves with the music, made after the Windows Media Player visualizations I remember: twelve scenes with odd names, a scene of its own for each song, changes on the song's strong moments. `[` `]` change the scene, `.` holds it, `y` shows the sung line. It never flashes.
 
 <sub>These recordings are made with [VHS](https://github.com/charmbracelet/vhs) from the scripts in [`tapes/`](tapes), on a fresh database with made-up history. In a terminal with the kitty graphics protocol (Ghostty, kitty, WezTerm) covers are sharp images; in the recordings they are coloured blocks.</sub>
 
-ymus rewritten in Rust. The original JavaScript version is frozen in the [`js`](https://github.com/Skryensya/rymus/tree/js) branch; both share the same data: rymus keeps it in `~/.rymus` and leaves a link at the old `~/.ymus`, which it moves there on its first run.
+It started as `ymus`, in JavaScript; this is the Rust rewrite, hence the name. The JavaScript version is frozen in the [`js`](https://github.com/Skryensya/rymus/tree/js) branch; both share the same data: rymus keeps it in `~/.rymus` and leaves a link at the old `~/.ymus`, which it moves there on its first run.
 
 ## Install
 
-Needs `mpv`, `yt-dlp` and `ffmpeg`. Developed on macOS with Ghostty, and runs on Linux.
+Needs `mpv`, `yt-dlp` and `ffmpeg`. I use it on macOS with Ghostty; it also runs on Linux. Windows is not something I test or plan for.
 
 On a Mac with Apple silicon, download the binary from [Releases](https://github.com/Skryensya/rymus/releases). It is not signed, so macOS may need `xattr -d com.apple.quarantine rymus` before the first run.
 
@@ -123,7 +124,7 @@ Run it again after updating.
 | **Playing** | |
 | `Space` | play or pause |
 | `n` `p` | next, previous |
-| `Shift ←` `Shift →` | seek 10 s |
+| `Shift ←` `Shift →` | seek 5 s |
 | `+` `-` | volume |
 | **Songs** | |
 | `l` `x` | like, dislike |
@@ -359,6 +360,6 @@ No network, sound or real `mpv`, and your database is not touched. Most tests ch
 
 ## Notes
 
-An unofficial project, not affiliated with or endorsed by YouTube or Google. Inspired by [involvex/youtube-music-cli](https://github.com/involvex/youtube-music-cli).
+A personal project, made for my own listening. Issues and ideas are welcome, but I build what I need. Unofficial, not affiliated with or endorsed by YouTube or Google. Inspired by [involvex/youtube-music-cli](https://github.com/involvex/youtube-music-cli).
 
 MIT license.

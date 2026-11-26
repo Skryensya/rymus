@@ -1,4 +1,4 @@
-# Lyrics that follow the song and scroll by hand, then karaoke: the line being sung in big braille letters.
+# Lyrics that follow the song and scroll by hand, then karaoke: the line being sung in big letters (the dots style: VHS's font has no glyphs for the solid one).
 Output docs/lyrics.gif
 Source tapes/style.tape
 
@@ -10,8 +10,7 @@ Type "/"
 Type "queen bohemian rhapsody"
 Enter
 Sleep 4s
-# past the albums, onto the first song: Queen's
-Down 9
+# the first song: Queen's
 Enter
 # wait, hidden, until the singing starts; hidden time is not in the GIF
 Sleep 8s

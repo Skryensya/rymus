@@ -41,6 +41,11 @@ impl App {
             return None;
         }
         if !self.lyric_cache.contains_key(&t.id) {
+            // a song on disk may have its lyrics beside it: no network needed
+            if let Some(kept) = self.downloads.files.get(&t.id).and_then(|f| lyrics::beside(f)) {
+                self.lyric_cache.insert(t.id.clone(), Some(kept));
+                return Some(t.id);
+            }
             if let Some(kept) = self.db.lyrics_get(&t.id).and_then(|s| lyrics::from_json(&s)).filter(|l| !stale(l, &t.id, &self.db)) {
                 self.lyric_cache.insert(t.id.clone(), Some(kept));
                 return Some(t.id);

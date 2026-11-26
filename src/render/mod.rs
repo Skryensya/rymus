@@ -188,6 +188,7 @@ impl App {
         let (label, hint, field_color) = match (self.typing, &self.naming) {
             (true, Some(Naming::Export)) => (tr!("Export to · a new folder of CSV files · Enter saves, Esc cancels"), tr!("a folder path"), a),
             (true, Some(Naming::Import)) => (tr!("Import from · replaces all your data · Enter, or Esc"), tr!("the folder of an export"), a),
+            (true, Some(Naming::FreeAll(_))) => (tr!("⚠ This deletes nearly all your downloads · type \"delete my downloads\" and Enter, or Esc to keep them"), "delete my downloads", RED),
             (true, Some(Naming::Wipe)) => (tr!("⚠ This erases all your data for good · type \"delete all my data\" and Enter, or Esc to keep it"), "delete all my data", RED),
             (true, Some(Naming::FreeCut)) => (tr!("Free up space · the least played share of your downloads, in % · Enter, or Esc"), "25", a),
             (true, Some(Naming::Folder)) => (tr!("Downloads folder · Enter saves, Esc cancels"), tr!("a folder path"), a),

@@ -491,7 +491,7 @@ Playback,Reproducción
 space,espacio
 next / previous,siguiente / anterior
 "repeat: queue, song, off","repetir: cola, canción, no"
-seek 10 s,avanzar 10 s
+seek 5 s,avanzar 5 s
 volume,volumen
 Move,Moverse
 move,mover
@@ -691,3 +691,5 @@ purple,morado
 magenta,magenta
 pink,rosado
 white,blanco
+"Nothing was deleted: type ""{w}"" to free that much","No se borró nada: escribe ""{w}"" para liberar tanto espacio"
+"⚠ This deletes nearly all your downloads · type ""delete my downloads"" and Enter, or Esc to keep them","⚠ Esto borra casi todas tus descargas · escribe ""delete my downloads"" y Enter, o Esc para conservarlas"

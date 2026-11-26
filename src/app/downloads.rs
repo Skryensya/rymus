@@ -5,6 +5,9 @@ use super::*;
 use crate::disk;
 use std::path::Path;
 
+// What has to be typed to free 90 % or more of the downloads at once.
+pub const FREE_ALL_WORDS: &str = "delete my downloads";
+
 #[derive(Default)]
 pub struct Downloads {
     pub files: std::collections::HashMap<String, PathBuf>, // song id -> the file
@@ -38,6 +41,24 @@ fn file_name(t: &Item) -> String {
 
 fn songs(n: usize) -> String {
     if n == 1 { tr!("1 song").into() } else { tr!("{n} songs", n = n) }
+}
+
+// The lyrics of a downloaded song, saved beside it (Song.lrc or Song.txt) when LRCLIB has them; looked up by the
+// file's own length, the surest match. Network work: called off the main thread.
+fn save_lyrics(t: &Item, file: &Path) {
+    #[cfg(not(test))]
+    {
+        let length = std::process::Command::new("ffprobe")
+            .args(["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0"])
+            .arg(file)
+            .output()
+            .ok()
+            .and_then(|o| String::from_utf8_lossy(&o.stdout).trim().parse::<f64>().ok())
+            .unwrap_or(0.0);
+        crate::lyrics::save_beside(file, &crate::lyrics::fetch(t, length));
+    }
+    #[cfg(test)]
+    let _ = (t, file); // no network in tests: the file writing has tests of its own (lyrics.rs)
 }
 
 // Runs yt-dlp; the file it wrote, or why not.
@@ -77,6 +98,11 @@ impl Downloads {
 impl App {
     pub(super) fn load_downloads(&mut self) {
         self.downloads.files = self.db.downloads().into_iter().filter(|(_, f)| f.is_file()).collect();
+        // songs downloaded before lyrics were saved with them get theirs, one at a time, in the background
+        let missing: Vec<(Item, PathBuf)> = self.db.download_files().into_iter().filter(|(_, f)| f.is_file() && !crate::lyrics::has_beside(f)).collect();
+        if !missing.is_empty() {
+            std::thread::spawn(move || missing.iter().for_each(|(t, f)| save_lyrics(t, f)));
+        }
     }
     pub fn downloaded(&self, id: &str) -> bool {
         self.downloads.files.contains_key(id)
@@ -137,6 +163,9 @@ impl App {
         self.hook("download-started", &t, json!({"folder": folder.to_string_lossy(), "format": format, "waiting": self.downloads.queue.len()}));
         std::thread::spawn(move || {
             let got = fetch(&t, &folder, format);
+            if let Ok(file) = &got {
+                save_lyrics(&t, file);
+            }
             let _ = tx.send(Msg::Apply(Box::new(move |app: &mut App| {
                 app.downloads.current = None;
                 match got {
@@ -210,7 +239,7 @@ impl App {
         let last = self.db.get_setting("freecut").unwrap_or_else(|| "25".into());
         self.start_naming(Naming::FreeCut, last.trim_end_matches([' ', '%']).to_string());
     }
-    pub(super) fn free_cut(&mut self, text: &str) {
+    pub(crate) fn free_cut(&mut self, text: &str) {
         match text.trim().trim_end_matches('%').trim().parse::<usize>() {
             Ok(pct) if (1..=100).contains(&pct) => {
                 self.db.set_setting("freecut", &pct.to_string());
@@ -229,8 +258,18 @@ impl App {
         let most = gone.iter().map(|g| g.2).max().unwrap_or(0);
         let ids: Vec<String> = gone.iter().map(|g| g.0.clone()).collect();
         let what = tr!("Delete {a}, {b} (played {most} times at most)", a = songs(ids.len()), b = disk::human(bytes), most = most);
-        let items = vec![(tr!("Keep them").to_string(), Action::Nothing), (what, Action::FreeSpace(ids))];
+        // nearly all of them: one Enter is not enough, the phrase has to be typed (see FREE_ALL_WORDS)
+        let delete = if pct >= 90 { Action::ConfirmFreeSpace(ids) } else { Action::FreeSpace(ids) };
+        let items = vec![(tr!("Keep them").to_string(), Action::Nothing), (what, delete)];
         self.menu = Some(Menu { title: tr!("free up space: the least played {pct} % of your downloads?", pct = pct), items, sel: 0 });
+    }
+    // The typed confirmation of a Free up space of 90 % or more.
+    pub(super) fn free_all(&mut self, ids: Vec<String>, typed: &str) {
+        if typed.trim().to_lowercase() == FREE_ALL_WORDS {
+            self.free_space(ids);
+        } else {
+            self.set_note(tr!("Nothing was deleted: type \"{w}\" to free that much", w = FREE_ALL_WORDS));
+        }
     }
     pub(super) fn free_space(&mut self, ids: Vec<String>) {
         let mut freed = 0;

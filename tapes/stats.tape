@@ -11,7 +11,7 @@ Show
 # Home
 Sleep 3s
 # to Stats
-Tab@500ms 4
+Tab@400ms 6
 Sleep 3s
 # artists
 Right
