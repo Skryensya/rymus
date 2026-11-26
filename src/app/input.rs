@@ -151,9 +151,10 @@ impl App {
                 return true;
             }
         }
-        if self.help {
+        if self.help || self.credits.is_some() {
             if matches!(e.kind, M::Down(_)) {
                 self.help = false;
+                self.credits = None;
                 self.help_scroll = 0;
                 return true;
             }
@@ -294,6 +295,7 @@ impl App {
         self.trip_on = false;
         self.lyrics = false;
         self.help = false;
+        self.credits = None;
         self.help_scroll = 0;
         self.menu = None;
     }
@@ -344,6 +346,22 @@ impl App {
         }
         if self.viewer.url.is_some() {
             return self.close_viewer(); // any key but space (it plays and pauses, above)
+        }
+        if self.credits.is_some() && !ctrl {
+            // the credits panel: ↑ ↓ scroll it, s shares what it is about, any other key closes it
+            match code {
+                KeyCode::Up => self.help_scroll = self.help_scroll.saturating_sub(1),
+                KeyCode::Down => self.help_scroll += 1, // drawing keeps it within the page
+                KeyCode::Char('s') => {
+                    let it = self.credits.as_ref().map(|c| c.item.clone());
+                    self.share(it);
+                }
+                _ => {
+                    self.credits = None;
+                    self.help_scroll = 0;
+                }
+            }
+            return;
         }
         if self.help && !ctrl && code != KeyCode::Char('/') {
             match code {
@@ -646,6 +664,11 @@ impl App {
             K::Char('c') if in_queue && !self.full && !self.lyrics => self.clear_menu(),
             K::Char('/') => self.start_typing(), // the only key that searches
             K::Char('?') => self.help = true,
+            K::Char('i') => {
+                // the highlighted song or album, or what plays when the list is hidden
+                let it = if self.full || self.lyrics { None } else { self.cur().filter(|t| matches!(t.kind, Kind::Track | Kind::Album)).cloned() };
+                self.show_credits(it);
+            }
             K::Char('+' | '=') => self.cmd(json!(["add", "volume", 5])),
             K::Char('-') => self.cmd(json!(["add", "volume", -5])),
             _ => {}

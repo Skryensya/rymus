@@ -217,6 +217,8 @@ impl App {
             Action::ClearQueue(all) => self.clear_queue(all),
             Action::Press(key) => self.press_key(key),
             Action::Choose(key, v) => self.pick_setting(&key, v),
+            Action::Credits(it) => self.show_credits(Some(it)),
+            Action::Share(it) => self.share(Some(it)),
             Action::GoTab(tab) => self.set_tab(tab),
             Action::Download(tracks) => self.download(tracks, true),
             Action::AskDeleteDownload(t) => self.ask_delete_download(t),
@@ -377,6 +379,8 @@ impl App {
                 }
                 if it.kind == Kind::Album {
                     v.push(item(tr!("Like the whole album"), Action::LikeAlbum(it.clone())));
+                    v.push(item(tr!("Credits"), Action::Credits(it.clone())));
+                    v.push(item(tr!("Share link"), Action::Share(it.clone())));
                 }
                 if it.kind == Kind::Button && it.id != "thisis" {
                     v.push(item(tr!("Save as playlist…"), Action::NewPlaylist(self.tracks_from(0))));
@@ -398,6 +402,8 @@ impl App {
                     item(if self.dislikes.contains(&it.id) { tr!("Remove dislike") } else { tr!("Dislike") }, Action::Rate(false, it.clone())),
                     item(tr!("Go to artist"), Action::GoArtist(credit.clone())),
                     item(tr!("Add to playlist…"), Action::PickPlaylist(vec![it.clone()])),
+                    item(tr!("Credits"), Action::Credits(it.clone())),
+                    item(tr!("Share link"), Action::Share(it.clone())),
                 ];
                 if !it.album.is_empty() {
                     v.push(item(tr!("Go to album"), Action::GoAlbum(Item { kind: Kind::AlbumStat, title: it.album.clone(), artist: credit.clone(), ..Default::default() })));

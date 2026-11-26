@@ -230,6 +230,14 @@ impl App {
             let more = if rows.len() > l { tr!(" · ↑↓ for more") } else { "" };
             rows.drain(..self.help_scroll);
             frame(&tr!("Keys{more} · any other key closes", more = more), a, &blank_to(rows.into_iter().take(l).collect()), w, a)
+        } else if let Some(c) = &self.credits {
+            let mut rows = help::credits_rows(c, iw, a);
+            self.help_scroll = self.help_scroll.min(rows.len().saturating_sub(l));
+            let more = if rows.len() > l { tr!(" · ↑↓ for more") } else { "" };
+            rows.drain(..self.help_scroll);
+            let what = if c.item.kind == Kind::Album { &c.item.author } else { &c.item.artist };
+            let (t, col) = title_for(&tr!("Credits · {title} — {by}{more} · s shares · any other key closes", title = c.item.title, by = what, more = more));
+            frame(&t, col, &blank_to(rows.into_iter().take(l).collect()), w, a)
         } else if let Some(m) = &self.menu {
             g.menu_top = (m.sel + 1).saturating_sub(l);
             let rows = m

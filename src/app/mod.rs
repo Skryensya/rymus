@@ -41,6 +41,8 @@ mod search;
 mod extras;
 mod filter;
 mod library;
+pub(crate) mod credits;
+pub use credits::Credits;
 pub(crate) mod downloads;
 pub use downloads::Downloads;
 pub use filter::Filter;
@@ -119,6 +121,8 @@ pub enum Action {
     Sleep(Option<Sleep>),
     Press(char),
     Choose(String, &'static str), // a setting's choice, clicked
+    Credits(Item),
+    Share(Item),
     GoTab(Tab),
     Unfollow(String),
     DropAlbum(String),
@@ -381,7 +385,8 @@ pub struct App {
     pub viewer: Viewer, // a cover, big (Shift+click)
     pub detach: bool, // quit leaving the music playing
     pub restart: bool, // and start again at once: the way to pick up a new build
-    pub help_scroll: usize,
+    pub help_scroll: usize, // also the credits panel's
+    pub credits: Option<Credits>,
     pub full: bool, // the full player (v)
     pub menu: Option<Menu>, // the actions menu (m)
     pub lyrics: bool, // the lyrics view (y), or karaoke (Y) when `karaoke` is on too
@@ -518,7 +523,7 @@ impl App {
         App {
             db, db_path, yt: Yt::new(), tx, mpv, feed, quit: false, clear_screen: false,
             tab: Tab::Home, prev_tab: Tab::Home, typing: false, buf: String::new(), history_at: None, history: vec![], draft: String::new(),
-            msg: String::new(), note: String::new(), note_until: None, busy: String::new(), help: false, eq: EqView::default(), viewer: Viewer::default(), detach: false, restart: false, help_scroll: 0, full: false, menu: None,
+            msg: String::new(), note: String::new(), note_until: None, busy: String::new(), help: false, eq: EqView::default(), viewer: Viewer::default(), detach: false, restart: false, help_scroll: 0, credits: None, full: false, menu: None,
             lyrics: false, lyric_scroll: 0, karaoke: false, lyric_scrolled: None, lyric_line: None, lyric_dots: None, karaoke_style,
             items: vec![], title: String::new(), numbered: false, back: vec![], head: None, query: String::new(), list_id: 0, next_id: 1,
             home_left: vec![], home_right: vec![], home_titles: Default::default(), home_wide: true, home_focus: PaneId::Left, home_sel: [0, 0],

@@ -107,7 +107,7 @@ pub type Section = (&'static str, &'static [(&'static str, &'static str)]);
 pub const HELP: [Section; 7] = [
     ("Playback", &[("space", "play / pause"), ("n  p", "next / previous"), ("r", "repeat: queue, song, off"), ("⇧← ⇧→", "seek 5 s"), ("+  -", "volume")]),
     ("Move", &[("↑ ↓", "move"), ("⏎ ⇧space", "open / play"), ("esc", "back, then Home"), ("tab", "next section"), ("← →", "Home column")]),
-    ("Song", &[("a", "add to queue"), ("m", "play next, more…"), ("l", "like song or album"), ("x", "dislike"), ("s", "save to playlist"), ("R", "radio"), ("o  O", "playing: album, artist"), ("F", "follow artist"), ("b", "download"), ("B", "downloads and your music")]),
+    ("Song", &[("a", "add to queue"), ("m", "play next, more…"), ("l", "like song or album"), ("x", "dislike"), ("s", "save to playlist"), ("R", "radio"), ("o  O", "playing: album, artist"), ("i", "credits, share link"), ("F", "follow artist"), ("b", "download"), ("B", "downloads and your music")]),
     ("Queue & playlists", &[("d", "remove / delete"), ("J  K", "move in queue"), ("c", "clear the queue"), ("m", "rename, play")]),
     ("Search", &[("/", "search"), ("f", "filter this list"), (":", "any command"), ("← →", "result tabs"), ("↑ ↓", "past searches"), ("⌥⌫", "erase word"), ("ctrl U", "erase all"), ("paste link", "import playlist")]),
     ("Views", &[("v", "full player"), ("V", "trip · [ ] scene · . hold"), ("y", "lyrics"), ("Y", "karaoke · f letters"), ("w", "visualizer style"), ("W", "visualizer on / off"), ("E", "equalizer")]),
@@ -157,4 +157,34 @@ mod tests {
         assert!(wide.len() <= 22, "three columns fit a small screen: {}", wide.len());
         assert!(wide.iter().any(|r| visible(r).contains("add to queue")));
     }
+}
+
+// The credits panel: an album's facts first, then each role with its names, and the link it shares.
+pub(super) fn credits_rows(c: &crate::app::Credits, w: usize, a: Rgb) -> Vec<String> {
+    let tw = w.saturating_sub(6).max(10);
+    let mut rows = vec![String::new()];
+    // an album's facts (kind and year, songs and length) first; its description, long, after the credits
+    let (facts, story) = c.about.split_at(c.about.len().min(2));
+    for line in facts {
+        rows.extend(crate::lyrics::wrap(line, tw).into_iter().map(|l| format!("   {l}")));
+    }
+    if !facts.is_empty() {
+        rows.push(String::new());
+    }
+    if c.roles.is_empty() {
+        rows.push(format!("   {}", dim(tr!("YouTube Music has no credits for this one"))));
+    }
+    for (role, names) in &c.roles {
+        rows.push(format!("   {}", fg(a, &bold(role))));
+        for l in crate::lyrics::wrap(&names.join(" · "), tw) {
+            rows.push(format!("     {l}"));
+        }
+        rows.push(String::new());
+    }
+    for line in story {
+        rows.extend(crate::lyrics::wrap(line, tw).into_iter().map(|l| format!("   {}", dim(&l))));
+        rows.push(String::new());
+    }
+    rows.push(format!("   {}  {}", dim(tr!("Link")), crate::app::credits::share_url(&c.item)));
+    rows.into_iter().map(|r| format!("{r}{}", spaces(w.saturating_sub(width(&super::eq::plain(&r)))))).collect()
 }

@@ -256,6 +256,35 @@ pub fn parse_album(v: &Value, album: &Item) -> Vec<Item> {
         .collect()
 }
 
+// A song's credits as YouTube Music lists them: (role, names), e.g. ("Produced by", ["Tony Berg", "Ethan Gruska"]).
+pub fn parse_credits(v: &Value) -> Vec<(String, Vec<String>)> {
+    all(v, "dismissableDialogContentSectionRenderer")
+        .into_iter()
+        .map(|s| {
+            // one name per line: split before the text is cleaned of control characters, line breaks included
+            let raw: String = s["subtitle"]["runs"].as_array().into_iter().flatten().filter_map(|r| r["text"].as_str()).collect();
+            (text(&s["title"]), raw.lines().map(crate::item::clean).map(|n| n.trim().to_string()).filter(|n| !n.is_empty()).collect::<Vec<_>>())
+        })
+        .filter(|(role, names)| !role.is_empty() && !names.is_empty())
+        .collect()
+}
+
+// An album's: (what its page says about it, the credits of all its songs together, each name once per role).
+pub type Credits = Vec<(String, Vec<String>)>;
+fn merge(into: &mut Credits, more: Credits) {
+    for (role, names) in more {
+        let at = into.iter().position(|(r, _)| *r == role).unwrap_or_else(|| {
+            into.push((role, vec![]));
+            into.len() - 1
+        });
+        for n in names {
+            if !into[at].1.contains(&n) {
+                into[at].1.push(n);
+            }
+        }
+    }
+}
+
 // An artist page: (popular songs, albums).
 pub fn parse_artist(v: &Value, name: &str) -> (Vec<Item>, Vec<Item>) {
     // the shelf's own title: keys come out sorted, so a deep search would find a nested one first
@@ -433,6 +462,32 @@ impl Yt {
     pub fn album(&self, album: &Item) -> Result<Vec<Item>, String> {
         Ok(parse_album(&self.call("browse", json!({"browseId": album.id}))?, album))
     }
+    fn credits_of(&self, id: &str) -> Result<Credits, String> {
+        Ok(parse_credits(&self.call("browse", json!({"browseId": format!("MPTC{id}")}))?))
+    }
+    // A song's credits. A music video has none of its own: then those of the song with its title, when there is one.
+    pub fn credits(&self, t: &Item) -> Result<Credits, String> {
+        let c = self.credits_of(&t.id)?;
+        if !c.is_empty() {
+            return Ok(c);
+        }
+        let wanted = t.title.to_lowercase();
+        match self.songs(&format!("{} {}", t.title, t.main_artist()))?.into_iter().find(|s| s.id != t.id && s.title.to_lowercase() == wanted) {
+            Some(song) => self.credits_of(&song.id),
+            None => Ok(c),
+        }
+    }
+    pub fn album_credits(&self, album: &Item) -> Result<(Vec<String>, Credits), String> {
+        let page = self.call("browse", json!({"browseId": album.id}))?;
+        let mut about: Vec<String> = first(&page, "musicResponsiveHeaderRenderer").map_or(vec![], |h| vec![text(&h["subtitle"]), text(&h["secondSubtitle"])]);
+        about.extend(first(&page, "musicDescriptionShelfRenderer").map(|d| text(&d["description"])));
+        about.retain(|s| !s.is_empty());
+        let mut all = Credits::new();
+        for t in parse_album(&page, album) {
+            merge(&mut all, self.credits(&t).unwrap_or_default()); // a song that fails leaves the rest
+        }
+        Ok((about, all))
+    }
     pub fn artist(&self, id: &str, name: &str) -> Result<Artist, String> {
         let page = self.call("browse", json!({"browseId": id}))?;
         let (songs, albums) = parse_artist(&page, name);
@@ -518,6 +573,11 @@ mod fake {
                 json!({"playlistPanelRenderer": {"contents": [radio_entry(seed, "Result One", "ATV"), radio_entry("r1", "Similar A", "ATV"),
                     radio_entry("clip", "Official Video", "OMV"), radio_entry("r2", "Similar B", "ATV"), radio_entry("r3", "Similar C", "ATV"),
                     radio_entry("r4", "Similar D", "ATV"), radio_entry("r5", "Similar E", "ATV")]}})
+            }
+            "browse" if body["browseId"].as_str().is_some_and(|b| b.starts_with("MPTC")) => {
+                let section = |role: &str, names: &str| json!({"dismissableDialogContentSectionRenderer": {"title": {"runs": [{"text": role}]}, "subtitle": {"runs": [{"text": names}]}}});
+                let writer = if body["browseId"] == "MPTCa2" { "Cy Writer" } else { "Ann Writer\nBob Writer" };
+                json!({"sections": [section("Performed by", "Band"), section("Written by", writer)]})
             }
             _ => json!({"musicResponsiveHeaderRenderer": {"title": {"runs": [{"text": "Road Songs"}]}},
                 "musicPlaylistShelfRenderer": {"contents": [row("p1", "Track One", "Driver"), row("p2", "Track Two", "Driver")]}}),

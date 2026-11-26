@@ -161,3 +161,16 @@ mod unix {
         let _ = std::fs::DirBuilder::new().recursive(true).mode(0o700).create(dir);
     }
 }
+
+// Puts text on the clipboard: pbcopy on macOS; wl-copy, xclip or xsel on Linux. False when none of them is there.
+pub fn copy(text: &str) -> bool {
+    if cfg!(test) {
+        return true; // a test never takes over your clipboard
+    }
+    let tools: &[&[&str]] = if cfg!(target_os = "macos") { &[&["pbcopy"]] } else { &[&["wl-copy"], &["xclip", "-selection", "clipboard"], &["xsel", "--clipboard", "--input"]] };
+    tools.iter().any(|t| {
+        let Ok(mut child) = Command::new(t[0]).args(&t[1..]).stdin(std::process::Stdio::piped()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).spawn() else { return false };
+        let wrote = child.stdin.take().is_some_and(|mut i| i.write_all(text.as_bytes()).is_ok());
+        wrote && child.wait().is_ok_and(|s| s.success())
+    })
+}

@@ -2271,6 +2271,38 @@ fn freeing_nearly_all_downloads_asks_for_the_phrase() {
 }
 
 #[test]
+fn credits_and_a_link_to_share_for_a_song_and_an_album() {
+    let mut ui = Ui::new();
+    ui.size = (110, 40);
+    ui.search("band");
+    ui.ch('i');
+    ui.wait("the credits", |ui| ui.app.credits.is_some());
+    for part in ["Credits · Result One — Band", "Performed by", "Written by", "Ann Writer · Bob Writer", "https://music.youtube.com/watch?v=s1"] {
+        assert!(ui.shows(part), "{part}\n{}", ui.screen().join("\n"));
+    }
+    ui.ch('s');
+    assert!(ui.app.credits.is_some() && ui.app.note.starts_with("Link copied"), "s shares and leaves the panel open: {}", ui.app.note);
+    ui.key(KeyCode::Esc);
+    assert!(ui.app.credits.is_none(), "any other key closes it");
+
+    // the row menu has both
+    ui.ch('m');
+    let labels: Vec<String> = ui.app.menu.as_ref().unwrap().items.iter().map(|i| i.0.clone()).collect();
+    assert!(labels.contains(&"Credits".to_string()) && labels.contains(&"Share link".to_string()), "{labels:?}");
+    ui.key(KeyCode::Esc);
+
+    // an album: the credits of all its songs together, each name once
+    ui.set_tab_home();
+    ui.search("record");
+    ui.key(KeyCode::Right); // the Albums tab
+    assert!(ui.shows("Long Road"), "{}", ui.screen().join("\n"));
+    ui.ch('i');
+    ui.wait("the album's credits", |ui| ui.app.credits.is_some());
+    assert!(ui.shows("Ann Writer · Bob Writer · Cy Writer"), "{}", ui.screen().join("\n"));
+    assert!(ui.shows("https://music.youtube.com/browse/MPREroad"));
+}
+
+#[test]
 fn shift_click_on_a_cover_shows_it_big_and_any_click_or_key_closes_it() {
     let mut ui = Ui::new();
     ui.size = (120, 34);
