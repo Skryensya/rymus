@@ -1,5 +1,5 @@
 // Draws the whole screen into one string. Every line is exactly as wide as the terminal.
-use crate::app::{fmt, minutes, App, Control, Geo, Repeat, Marquee, Pane, PaneId, Tab, CATS, PERIODS};
+use crate::app::{fmt, minutes, App, Control, Geo, Repeat, Marquee, Naming, Pane, PaneId, Tab, CATS, PERIODS};
 use crate::cover::{self, Got};
 use crate::item::{Item, Kind, Origin};
 use crate::lyrics::{self, Lyrics};
@@ -134,7 +134,7 @@ impl App {
         let mut g = Geo { top: 4 + extra + if top_dock { r + 2 } else { 0 }, ..Default::default() };
         let now = self.now().cloned();
         // the cover is about what plays, else what is highlighted (a setting has nothing to show)
-        let focus = now.clone().or_else(|| self.cur().filter(|i| !matches!(i.kind, Kind::Setting | Kind::Header)).cloned());
+        let focus = now.clone().or_else(|| self.cur().filter(|i| !matches!(i.kind, Kind::Setting | Kind::Header) && self.tab != Tab::Config).cloned());
         let url = focus.as_ref().map(|f| f.cover.clone()).unwrap_or_default();
 
         // 2. The cover: loaded once the highlight settles (no fetch storm while scrolling)
@@ -178,8 +178,14 @@ impl App {
         let active = crate::app::TABS.iter().position(|&t| t == shown_tab).unwrap_or(0);
         let (bar, spans) = tab_bar(w, &tabs, active, a);
         g.tabs = spans;
-        let label = if self.typing && self.naming.is_some() { "Name" } else { "/ Search" };
-        let search = search_bar(w, label, self.typing, if self.typing { &self.buf } else { &self.query }, "artists, albums, songs, or a Spotify / YouTube playlist link", a, !compact);
+        let (label, hint, field_color) = match (self.typing, &self.naming) {
+            (true, Some(Naming::Export)) => ("Export to · a new folder of CSV files · Enter saves, Esc cancels", "a folder path", a),
+            (true, Some(Naming::Import)) => ("Import from · replaces all your data · Enter, or Esc", "the folder of an export", a),
+            (true, Some(Naming::Wipe)) => ("⚠ DANGER · deletes all your data · type \"delete all my data\" and Enter, or Esc", "delete all my data", RED),
+            (true, Some(_)) => ("Name", "", a),
+            _ => ("/ Search", "artists, albums, songs, or a Spotify / YouTube playlist link", a),
+        };
+        let search = search_bar(w, label, self.typing, if self.typing { &self.buf } else { &self.query }, hint, field_color, !compact);
         g.field_x1 = w;
         g.field_y1 = 1 + search.len();
 

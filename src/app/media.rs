@@ -1,4 +1,5 @@
-// Lyrics (LRCLIB) and cover images, fetched in the background and cached for the session.
+// Lyrics (LRCLIB) and cover images, fetched in the background. Covers are kept for the session, lyrics on disk too
+// (db::lyrics_*), so a song you play again has them at once.
 use super::*;
 
 impl App {
@@ -36,11 +37,18 @@ impl App {
             return None;
         }
         if !self.lyric_cache.contains_key(&t.id) {
+            if let Some(kept) = self.db.lyrics_get(&t.id).and_then(|s| lyrics::from_json(&s)).filter(|l| !stale(l, &t.id, &self.db)) {
+                self.lyric_cache.insert(t.id.clone(), Some(kept));
+                return Some(t.id);
+            }
             self.lyric_cache.insert(t.id.clone(), None);
             let (tx, dur, id) = (self.tx.clone(), self.dur, t.id.clone());
             std::thread::spawn(move || {
                 let result = lyrics::fetch(&t, dur);
                 let _ = tx.send(Msg::Apply(Box::new(move |app: &mut App| {
+                    if let Some(json) = lyrics::to_json(&result) {
+                        app.db.lyrics_set(&id, &json);
+                    }
                     app.lyric_cache.insert(id, Some(result));
                 })));
             });
@@ -107,4 +115,9 @@ impl App {
         });
         None
     }
+}
+
+// "No lyrics" is asked again after a month: LRCLIB keeps getting new ones. Lyrics found never go stale.
+fn stale(l: &Lyrics, id: &str, db: &crate::db::Db) -> bool {
+    *l == Lyrics::None && db.lyrics_age(id).is_some_and(|age| age > std::time::Duration::from_secs(30 * 86_400))
 }

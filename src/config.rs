@@ -52,6 +52,15 @@ pub fn rows(db: &Db) -> Vec<Item> {
         }
         rows.push(Item { kind: Kind::Setting, id: s.key.into(), title: s.label.into(), author: value(db, s.key).into(), detail: Some(s.hint.into()), ..Default::default() });
     }
+    // what you do with all of it at once: each asks first
+    rows.push(Item { kind: Kind::Header, title: "Data".into(), ..Default::default() });
+    for (id, title, hint) in [
+        ("export", "Export your data…", "everything (likes, playlists, history, settings) as CSV files in a new folder: open them in any spreadsheet, keep them, or take them to another computer"),
+        ("import", "Import data…", "replace everything here with an exported folder: what is here now is lost, so export it first if you want to keep it"),
+        ("wipe", "Wipe all data…", "delete every like, playlist, play, search and setting; rymus starts empty, as on its first run. You type \"delete all my data\" to confirm"),
+    ] {
+        rows.push(Item { kind: Kind::Button, id: id.into(), title: title.into(), detail: Some(hint.into()), ..Default::default() });
+    }
     rows
 }
 pub fn choices(key: &str) -> &'static [&'static str] {
@@ -115,7 +124,7 @@ mod tests {
         assert_eq!(value(&db, "quality"), "best");
         let rows = rows(&db);
         assert_eq!(rows.iter().filter(|r| r.kind == Kind::Setting).count(), SETTINGS.len());
-        assert_eq!(rows.iter().filter(|r| r.kind == Kind::Header).map(|r| r.title.as_str()).collect::<Vec<_>>(), ["Sound", "Streaming", "Screen", "Look", "Output"]);
+        assert_eq!(rows.iter().filter(|r| r.kind == Kind::Header).map(|r| r.title.as_str()).collect::<Vec<_>>(), ["Sound", "Streaming", "Screen", "Look", "Output", "Data"]);
     }
 
     #[test]

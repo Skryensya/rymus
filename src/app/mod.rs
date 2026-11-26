@@ -34,6 +34,7 @@ mod media;
 mod clock;
 mod input;
 mod equalizer;
+mod data;
 pub use equalizer::EqView;
 
 pub const CATS: [&str; 3] = ["songs", "artists", "albums"];
@@ -67,6 +68,7 @@ pub enum Msg {
 
 #[derive(Clone)]
 pub enum Action {
+    Data(String), // export, import or wipe (Config > Data)
     OpenAlbum(Item),
     OpenArtist(Item),
     GoArtist(String),
@@ -102,6 +104,9 @@ pub enum Naming {
     New(Vec<Item>),
     Rename(i64),
     EqPreset,
+    Export, // the file to write a copy of your data to
+    Import, // the file to read your data back from
+    Wipe,   // the word that confirms deleting everything
 }
 
 pub struct Menu {

@@ -19,6 +19,7 @@ mod output; //   which device the sound goes to
 mod platform; // what differs between macOS and Linux
 
 // Your data and taste
+mod csv; //      CSV files: your data exported and read back
 mod db; //       the local SQLite log: songs, plays, likes, playlists, settings
 mod config; //   the Config tab's settings
 mod eq; //       the equalizer: bands, profiles, the filter and its commands

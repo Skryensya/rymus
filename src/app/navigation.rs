@@ -198,6 +198,7 @@ impl App {
                 self.playlists_changed();
             }
             Action::Nothing => {}
+            Action::Data(what) => self.start_data(&what),
             Action::ThisIs(button) => self.this_is(button),
             Action::Search(text) => {
                 self.query = text.clone();
@@ -220,6 +221,7 @@ impl App {
             Kind::NewPlaylist => Action::NewPlaylist(vec![]),
             Kind::Query => Action::Search(it.title.clone()),
             Kind::Button if it.id == "thisis" => Action::ThisIs(it.clone()),
+            Kind::Button if matches!(it.id.as_str(), "export" | "import" | "wipe") => Action::Data(it.id.clone()),
             Kind::Button => Action::PlayAll(it.id == "shuffle"),
             Kind::Track | Kind::Header | Kind::Setting => return None,
         })

@@ -14,6 +14,27 @@ pub enum Lyrics {
     Error,
 }
 
+// How lyrics are kept on disk (db::lyrics_*): the answer as JSON. An error is never kept, so it is asked again.
+pub fn to_json(l: &Lyrics) -> Option<String> {
+    let v = match l {
+        Lyrics::Synced(lines) => serde_json::json!({"synced": lines}),
+        Lyrics::Plain(lines) => serde_json::json!({"plain": lines}),
+        Lyrics::Instrumental => serde_json::json!("instrumental"),
+        Lyrics::None => serde_json::json!("none"),
+        Lyrics::Error => return None,
+    };
+    Some(v.to_string())
+}
+pub fn from_json(s: &str) -> Option<Lyrics> {
+    let v: serde_json::Value = serde_json::from_str(s).ok()?;
+    Some(match &v {
+        serde_json::Value::String(k) if k == "instrumental" => Lyrics::Instrumental,
+        serde_json::Value::String(k) if k == "none" => Lyrics::None,
+        _ if v.get("synced").is_some() => Lyrics::Synced(serde_json::from_value(v["synced"].clone()).ok()?),
+        _ => Lyrics::Plain(serde_json::from_value(v.get("plain")?.clone()).ok()?),
+    })
+}
+
 // "[mm:ss.xx] line" (a line may carry several stamps) -> (seconds, text) in time order.
 pub fn parse_lrc(lrc: &str) -> Vec<(f64, String)> {
     let mut out = Vec::new();

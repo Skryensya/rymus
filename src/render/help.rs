@@ -45,6 +45,7 @@ impl App {
         let enter = match kind {
             Kind::Resume => "resume",
             Kind::Mix => "play mix",
+            Kind::Button if self.tab == Tab::Config => "choose",
             Kind::Button => "play",
             Kind::Setting => "change",
             Kind::Track if self.cur().is_some_and(|c| self.is_current(c)) => pause,

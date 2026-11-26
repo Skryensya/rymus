@@ -130,7 +130,7 @@ Cover images use the kitty graphics protocol (Ghostty, kitty, WezTerm) and fall 
 
 **Stats** ranks your songs, artists and albums by minutes listened (never by play counts) over the last week, month or year, with a chart of each day (or month) and of the hours you listen at, when the screen has room.
 
-**Config** holds the settings in groups (Sound, Streaming, Screen, Look, Output), each with all its choices in view. `↑` `↓` choose one, `←` `→` or `Enter` change it, and what it does is explained beside the list (with a picture of the overlap for Crossfade). Everything is kept for next time:
+**Config** holds the settings in groups (Sound, Streaming, Screen, Look, Output, Data), each with all its choices in view. `↑` `↓` choose one, `←` `→` or `Enter` change it, and what it does is explained beside the list (with a picture of the overlap for Crossfade). Everything is kept for next time:
 
 | Setting | What it does |
 |---|---|
@@ -145,7 +145,7 @@ Cover images use the kitty graphics protocol (Ghostty, kitty, WezTerm) and fall 
 | Borders | rounded, square, heavy or double frames, the player's buttons included |
 | Pause on output change | pauses when headphones are unplugged (macOS) |
 
-**Lyrics** come from LRCLIB. With `y` you read and scroll them; synced lyrics highlight the line being sung. With `Y` they become karaoke: the line being sung in big braille letters (accents included), the one before and the one after small, and four dots under it that start empty and fill one by one, in equal steps, so they are all full just before the next line. Lines in scripts the braille font does not have are shown as plain text.
+**Lyrics** come from LRCLIB and are kept on disk, so a song you play again has them at once, even offline. All of them together stay under 10 MB (about 3 000 songs); past that, the ones you used longest ago are dropped. "No lyrics" is asked again after a month, since LRCLIB keeps adding them. With `y` you read and scroll them; synced lyrics highlight the line being sung. With `Y` they become karaoke: the line being sung in big braille letters (accents included), the one before and the one after small, and four dots under it that start empty and fill one by one, in equal steps, so they are all full just before the next line. Lines in scripts the braille font does not have are shown as plain text.
 
 ## Leaving it playing
 
@@ -193,7 +193,7 @@ Then `chmod +x ~/.rymus/hooks/liked`. Hooks run in the background and are not st
 
 ## Your data
 
-Likes, history, playlists and settings stay in `~/.rymus/rymus.db` (`YM_DB` points it elsewhere). The services used receive only what a request needs:
+Likes, history, playlists and settings stay in `~/.rymus/rymus.db` (`YM_DB` points it elsewhere). In Config, under **Data**: *Export your data…* writes all of it as CSV files (one per table: tracks, likes, plays, playlists…) in a new folder any spreadsheet opens, *Import data…* replaces everything with such a folder, and *Wipe all data…* deletes it all (you type `delete all my data` to confirm); rymus then starts empty, as on its first run. The services used receive only what a request needs:
 
 - **YouTube Music**: your searches and the songs you play or ask recommendations for
 - **Spotify**: the id of a playlist you paste

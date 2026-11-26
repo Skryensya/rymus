@@ -11,6 +11,11 @@ pub fn now_ms() -> i64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_millis() as i64)
 }
 
+// The tables that are your data, in the order they are exported and read back (songs before what points at them).
+const EXPORTED: [&str; 8] = ["tracks", "likes", "dislikes", "plays", "playlists", "playlist_tracks", "searches", "settings"];
+// Lyrics kept on disk, all together: about 3 000 songs. Past it the ones used longest ago are dropped.
+pub const LYRICS_CAP: i64 = 10 * 1024 * 1024;
+
 pub fn default_path() -> PathBuf {
     std::env::var_os("YM_DB").map(PathBuf::from).unwrap_or_else(|| {
         let home = crate::platform::home_dir();
@@ -74,6 +79,87 @@ fn track(r: &Row) -> rusqlite::Result<Item> {
 }
 
 impl Db {
+    // A connection to nothing, held for the moment the real database is closed and replaced.
+    pub fn memory() -> Db {
+        Db { c: Connection::open_in_memory().expect("an in-memory database"), last_search: Cell::new(0) }
+    }
+    // Your data as CSV files, one per table, in a new folder (an existing one is never overwritten). The caches are
+    // left out: they are rebuilt on their own.
+    pub fn export_csv(&self, dir: &std::path::Path) -> Result<(), String> {
+        if dir.exists() {
+            return Err(format!("{} already exists", dir.display()));
+        }
+        std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+        for table in EXPORTED {
+            let mut q = self.c.prepare(&format!("SELECT * FROM {table}")).map_err(|e| e.to_string())?;
+            let names: Vec<String> = q.column_names().iter().map(|n| n.to_string()).collect();
+            let mut out = crate::csv::line(&names);
+            let mut rows = q.query([]).map_err(|e| e.to_string())?;
+            while let Some(r) = rows.next().map_err(|e| e.to_string())? {
+                let fields: Vec<String> = (0..names.len())
+                    .map(|i| match r.get_ref(i) {
+                        Ok(rusqlite::types::ValueRef::Integer(n)) => n.to_string(),
+                        Ok(rusqlite::types::ValueRef::Real(x)) => x.to_string(),
+                        Ok(rusqlite::types::ValueRef::Text(t)) => String::from_utf8_lossy(t).into_owned(),
+                        _ => String::new(), // NULL
+                    })
+                    .collect();
+                out += &crate::csv::line(&fields);
+            }
+            std::fs::write(dir.join(format!("{table}.csv")), out).map_err(|e| e.to_string())?;
+        }
+        Ok(())
+    }
+    // A new database at `into` holding what an exported folder has. Columns are matched by name, so a folder from an
+    // older or newer version still reads; a column this version does not know is refused, never put in the SQL.
+    pub fn import_csv(dir: &std::path::Path, into: &std::path::Path) -> Result<(), String> {
+        if let Some(t) = ["tracks", "likes", "plays"].iter().find(|t| !dir.join(format!("{t}.csv")).is_file()) {
+            return Err(format!("{} has no {t}.csv", dir.display()));
+        }
+        let _ = std::fs::remove_file(into);
+        let db = Db::open(into).map_err(|e| e.to_string())?;
+        db.c.execute_batch("BEGIN").map_err(|e| e.to_string())?;
+        for table in EXPORTED {
+            let Ok(text) = std::fs::read_to_string(dir.join(format!("{table}.csv"))) else { continue };
+            let mut rows = crate::csv::parse(&text).into_iter();
+            let Some(head) = rows.next() else { continue };
+            let known: HashSet<String> = db.c.prepare(&format!("PRAGMA table_info({table})")).and_then(|mut q| q.query_map([], |r| r.get(1))?.collect()).map_err(|e| e.to_string())?;
+            if let Some(bad) = head.iter().find(|h| !known.contains(*h)) {
+                return Err(format!("{table}.csv has a column rymus does not know: {bad}"));
+            }
+            let sql = format!("INSERT OR REPLACE INTO {table}({}) VALUES({})", head.iter().map(|h| format!("\"{h}\"")).collect::<Vec<_>>().join(","), vec!["?"; head.len()].join(","));
+            let mut q = db.c.prepare(&sql).map_err(|e| e.to_string())?;
+            for row in rows.filter(|r| r.len() == head.len()) {
+                // an empty field was NULL: text columns read it back as empty
+                let values: Vec<Option<&str>> = row.iter().map(|f| (!f.is_empty()).then_some(f.as_str())).collect();
+                q.execute(rusqlite::params_from_iter(values)).map_err(|e| format!("{table}.csv: {e}"))?;
+            }
+        }
+        db.c.execute_batch("COMMIT").map_err(|e| e.to_string())
+    }
+
+    // Lyrics already fetched, by song id; a hit counts as a use, so what you play stays and the rest goes first.
+    pub fn lyrics_get(&self, id: &str) -> Option<String> {
+        let v: String = self.c.query_row("SELECT v FROM lyrics WHERE id=?", [id], |r| r.get(0)).ok()?;
+        // "none" keeps the time it was asked, so it can be asked again (see media::stale)
+        self.exec("UPDATE lyrics SET at=? WHERE id=? AND v != '\"none\"'", params![now_ms(), id]);
+        Some(v)
+    }
+    pub fn lyrics_age(&self, id: &str) -> Option<Duration> {
+        let at: i64 = self.c.query_row("SELECT at FROM lyrics WHERE id=?", [id], |r| r.get(0)).ok()?;
+        Some(Duration::from_millis((now_ms() - at).max(0) as u64))
+    }
+    // Keeps them, and keeps all of them together under LYRICS_CAP by dropping the ones used longest ago.
+    pub fn lyrics_set(&self, id: &str, v: &str) {
+        self.exec("INSERT INTO lyrics VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET v=excluded.v, at=excluded.at", params![id, v, now_ms()]);
+        let size = || self.c.query_row("SELECT COALESCE(SUM(length(v)), 0) FROM lyrics", [], |r| r.get::<_, i64>(0)).unwrap_or(0);
+        while size() > LYRICS_CAP {
+            if self.exec("DELETE FROM lyrics WHERE id IN (SELECT id FROM lyrics ORDER BY at LIMIT 1)", []) == 0 {
+                break;
+            }
+        }
+    }
+
     pub fn open(path: &std::path::Path) -> rusqlite::Result<Db> {
         if let Some(dir) = path.parent() {
             crate::platform::private_dir(dir);
@@ -92,7 +178,8 @@ impl Db {
              CREATE TABLE IF NOT EXISTS playlist_tracks(id INTEGER PRIMARY KEY, playlist_id INTEGER NOT NULL, track_id TEXT NOT NULL REFERENCES tracks(id));
              CREATE TABLE IF NOT EXISTS searches(q TEXT PRIMARY KEY, at INTEGER NOT NULL);
              CREATE TABLE IF NOT EXISTS settings(k TEXT PRIMARY KEY, v TEXT);
-             CREATE TABLE IF NOT EXISTS cache(k TEXT PRIMARY KEY, v TEXT, at INTEGER NOT NULL);",
+             CREATE TABLE IF NOT EXISTS cache(k TEXT PRIMARY KEY, v TEXT, at INTEGER NOT NULL);
+             CREATE TABLE IF NOT EXISTS lyrics(id TEXT PRIMARY KEY, v TEXT NOT NULL, at INTEGER NOT NULL);",
         )?;
         // columns added later; older rows keep NULL / 0
         let columns: HashSet<String> = c.prepare("PRAGMA table_info(plays)")?.query_map([], |r| r.get(1))?.collect::<Result<_, _>>()?;
@@ -393,6 +480,47 @@ impl Db {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn lyrics_stay_under_the_cap_dropping_the_ones_used_longest_ago() {
+        let dir = std::env::temp_dir().join(format!("rymus-lyrics-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let db = Db::open(&dir.join("t.db")).unwrap();
+        let big = "x".repeat((LYRICS_CAP / 4) as usize);
+        for id in ["a", "b", "c"] {
+            db.lyrics_set(id, &big);
+            std::thread::sleep(Duration::from_millis(3));
+        }
+        assert!(db.lyrics_get("a").is_some()); // played again: now the most recent
+        std::thread::sleep(Duration::from_millis(3));
+        db.lyrics_set("d", &big);
+        db.lyrics_set("e", &big); // over the cap: b goes, the oldest use
+        assert!(db.lyrics_get("b").is_none());
+        assert!(db.lyrics_get("a").is_some() && db.lyrics_get("e").is_some());
+        db.lyrics_set("n", "\"none\"");
+        assert!(db.lyrics_age("n").is_some());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn csv_export_and_import_keep_everything() {
+        let dir = std::env::temp_dir().join(format!("rymus-csv-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let db = Db::open(&dir.join("t.db")).unwrap();
+        let t = Item { id: "v1".into(), title: "Hey, \"you\"".into(), artist: "Band".into(), ..Default::default() };
+        db.toggle_like(&t);
+        db.set_setting("accent", "blue");
+        db.export_csv(&dir.join("out")).unwrap();
+        assert!(db.export_csv(&dir.join("out")).is_err(), "an existing folder is never overwritten");
+        Db::import_csv(&dir.join("out"), &dir.join("back.db")).unwrap();
+        let back = Db::open(&dir.join("back.db")).unwrap();
+        assert!(back.liked_ids().contains("v1"));
+        assert_eq!(back.get_setting("accent").as_deref(), Some("blue"));
+        // a column it does not know is refused, never put in the SQL
+        std::fs::write(dir.join("out/settings.csv"), "k,v;DROP TABLE likes\r\na,b\r\n").unwrap();
+        assert!(Db::import_csv(&dir.join("out"), &dir.join("bad.db")).unwrap_err().contains("does not know"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn the_old_data_folder_moves_once_and_the_old_names_still_work() {

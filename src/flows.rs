@@ -132,6 +132,9 @@ impl Ui {
         let bytes = std::mem::take(&mut *self.player.lock().unwrap());
         String::from_utf8_lossy(&bytes).lines().filter_map(|l| serde_json::from_str::<Value>(l).ok()).map(|v| v["command"].clone()).collect()
     }
+    fn buf_starts_with(&self, text: &str) -> bool {
+        self.app.buf.starts_with(text)
+    }
     fn queue(&self) -> Vec<&str> {
         self.app.queue.iter().map(|t| t.title.as_str()).collect()
     }
@@ -597,7 +600,7 @@ fn settings_are_applied_again_when_the_app_starts() {
 #[test]
 fn the_config_tab_shows_every_choice_and_explains_the_one_you_are_on() {
     let mut ui = Ui::new();
-    ui.size = (110, 46);
+    ui.size = (110, 54);
     open_config(&mut ui);
     for heading in ["SOUND", "STREAMING", "SCREEN", "LOOK", "OUTPUT"] {
         assert!(ui.shows(heading), "{heading}\n{}", ui.screen().join("\n"));
@@ -1450,4 +1453,67 @@ fn playlist_hooks_name_the_playlist() {
     ui.key(KeyCode::Enter); // open Radio
     ui.ch('d');
     assert_eq!(got(&mut ui, "playlist-remove", 1)[0]["playlist"], "Radio");
+}
+
+// ---------- your data ----------
+// Config > Data: the row with this id, highlighted.
+fn to_data_row(ui: &mut Ui, id: &str) {
+    for _ in 0..10 {
+        if ui.app.tab == Tab::Config {
+            break;
+        }
+        ui.key(KeyCode::Tab);
+    }
+    assert_eq!(ui.app.tab, Tab::Config);
+    let at = ui.app.settings.iter().position(|r| r.id == id).expect("a Data row");
+    ui.app.sel = at;
+}
+
+#[test]
+fn your_data_exports_wipes_only_with_the_word_and_imports_back() {
+    let mut ui = Ui::new();
+    ui.search("band");
+    ui.ch('l'); // a like to keep
+    assert_eq!(ui.app.likes.len(), 1);
+    let file = ui.dir.join("export");
+
+    // export: Enter asks for a file, with a dated name already written
+    to_data_row(&mut ui, "export");
+    ui.key(KeyCode::Enter);
+    assert!(ui.app.typing && ui.buf_starts_with("~/rymus-export-"), "{}", ui.app.buf);
+    ui.app.buf = file.display().to_string();
+    ui.key(KeyCode::Enter);
+    assert!(file.join("likes.csv").is_file() && file.join("tracks.csv").is_file(), "exported as CSV: {}", ui.app.msg);
+
+    // wipe: the field is a red warning, and anything but the word deletes nothing
+    to_data_row(&mut ui, "wipe");
+    ui.key(KeyCode::Enter);
+    assert!(ui.shows("⚠ DANGER"), "{}", ui.screen().join("\n"));
+    ui.text("yes");
+    ui.key(KeyCode::Enter);
+    assert_eq!(ui.app.likes.len(), 1, "not the word: nothing deleted");
+    ui.key(KeyCode::Enter);
+    ui.text("wipe"); // not the sentence either
+    ui.key(KeyCode::Enter);
+    assert_eq!(ui.app.likes.len(), 1, "a single word deletes nothing");
+    ui.key(KeyCode::Enter);
+    ui.text("delete all my data");
+    ui.key(KeyCode::Enter);
+    assert!(ui.app.likes.is_empty() && ui.app.db.liked_ids().is_empty(), "wiped");
+    assert!(ui.dir.join("t.db").is_file(), "an empty database is made again at once");
+    ui.search("again"); // and it works as on the first run
+    ui.ch('l');
+    assert_eq!(ui.app.db.liked_ids().len(), 1);
+
+    // import: everything is replaced by the file, the like that was exported is back
+    to_data_row(&mut ui, "import");
+    ui.key(KeyCode::Enter);
+    ui.app.buf = ui.dir.join("not-there.db").display().to_string();
+    ui.key(KeyCode::Enter);
+    assert!(ui.app.msg.contains("Not a rymus export"), "{}", ui.app.msg);
+    ui.key(KeyCode::Enter);
+    ui.app.buf = file.display().to_string();
+    ui.key(KeyCode::Enter);
+    assert_eq!(ui.app.likes.len(), 1, "{}", ui.app.msg);
+    assert!(ui.app.likes.contains("s1"), "the like from the file");
 }

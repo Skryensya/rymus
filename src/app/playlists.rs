@@ -58,6 +58,9 @@ impl App {
                 None => self.msg = "Could not save the playlist".into(),
             },
             Naming::EqPreset => return self.new_eq(name),
+            Naming::Export => return self.export_data(&name),
+            Naming::Import => return self.import_data(&name),
+            Naming::Wipe => return self.wipe_data(&name),
             Naming::Rename(id) => {
                 self.db.rename_playlist(id, &name);
                 if self.viewed_playlist() == Some(id) {

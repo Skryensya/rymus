@@ -22,6 +22,13 @@ impl App {
                 lines.push(dim(&bold(&format!("  {}", it.title.to_uppercase()))));
             } else {
                 let on = i == sel;
+                if it.kind == Kind::Button {
+                    // an action, not a choice: wipe is in red
+                    let color = if it.id == "wipe" { RED } else { a };
+                    lines.push(if on { format!("{} {}", fg(color, "▌"), fg(color, &bold(&it.title))) } else if it.id == "wipe" { format!("  {}", fg(RED, &it.title)) } else { format!("  {}", it.title) });
+                    index.push(i);
+                    continue;
+                }
                 let label = cell(&it.title, lw);
                 let chips: String = config::choices(&it.id)
                     .iter()
@@ -40,11 +47,12 @@ impl App {
         let side = iw >= list_w + 36;
         let pw = if side { iw - list_w - 3 } else { iw.saturating_sub(4) };
         let mut about = vec![];
-        if let Some(it) = data.get(sel).filter(|it| it.kind == Kind::Setting) {
+        if let Some(it) = data.get(sel).filter(|it| matches!(it.kind, Kind::Setting | Kind::Button)) {
             if !side {
                 about.push(dim(&"─".repeat(pw)));
             }
-            about.push(fg(a, &bold(&format!("{} · {}", it.title, it.author))));
+            let head = if it.kind == Kind::Button { it.title.trim_end_matches('…').to_string() } else { format!("{} · {}", it.title, it.author) };
+            about.push(fg(if it.id == "wipe" { RED } else { a }, &bold(&head)));
             let hint = it.detail.clone().unwrap_or_default();
             let mut text = crate::lyrics::wrap(&format!("{}{}", hint[..1].to_uppercase(), &hint[1..]), pw);
             text.truncate(if side { 4 } else { 2 });

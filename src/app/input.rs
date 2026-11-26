@@ -393,7 +393,8 @@ impl App {
             }
             _ => {}
         }
-        if self.tab == Tab::Config && !self.lyrics && !self.full && !shift && matches!(code, K::Left | K::Right | K::Enter) {
+        let on_setting = self.cur().is_some_and(|i| i.kind == Kind::Setting);
+        if self.tab == Tab::Config && !self.lyrics && !self.full && !shift && on_setting && matches!(code, K::Left | K::Right | K::Enter) {
             return self.change_setting(if code == K::Left { -1 } else { 1 });
         }
         if self.tab == Tab::Stats && !self.lyrics && (ch == Some('t') || (!shift && matches!(code, K::Left | K::Right))) {
