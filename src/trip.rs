@@ -1,13 +1,13 @@
-// Psychedelic full-screen visualizer in ASCII, after Windows Media Player's "Battery" and MilkDrop. One ethereal field,
+// "the old smoke", one of the scenes of the full screen visualizer (src/scenes.rs): psychedelic, in ASCII, after Windows Media Player's "Battery" and MilkDrop. One ethereal field,
 // like smoke, seen as an endless tunnel: shapes are born in the middle and drift outwards, so it always feels like
 // flying forward through it, at the song's pace. Each song gets its own look from its id (symmetry, spiral, swirl size,
 // noise seed), and the music keeps shaping it: the bass bends and wobbles the smoke, the spectrum lights it by angle,
 // the tempo and loudness set the speed, each beat pushes forward and sends a soft ripple out, and the dynamic range sets
 // how strongly the symmetry shows. Everything that comes from the sound is smoothed, so nothing flickers. Colors come
 // from the cover's palette, carried by the flow. The background is never black.
+use crate::scenes::Cell;
 use crate::ui::Rgb;
 use std::f64::consts::PI;
-use std::fmt::Write;
 
 const RAMP: &[u8] = b" .`':-~=+*";
 
@@ -139,7 +139,14 @@ impl Trip {
     // levels, pal the cover's palette (dark to light, at least one color), id the song, energy how loud it really is
     // (0..1): a soft song stays dim and slow even though its bands are scaled up to their own peaks.
     #[allow(clippy::too_many_arguments)]
+    #[cfg(test)] // the app draws it through the scenes; its own test still looks at it as rows
     pub fn frame(&mut self, w: usize, h: usize, t: f64, bands: &[f64], pal: &[Rgb], id: &str, energy: f64) -> Vec<String> {
+        let cells = self.cells(w, h, t, bands, pal, id, energy);
+        crate::scenes::to_rows(&cells, w, h)
+    }
+    // The same picture as cells, for the scenes (src/scenes.rs), which this is one of.
+    #[allow(clippy::too_many_arguments)]
+    pub fn cells(&mut self, w: usize, h: usize, t: f64, bands: &[f64], pal: &[Rgb], id: &str, energy: f64) -> Vec<Cell> {
         if !id.is_empty() && id != self.song {
             self.song = id.to_string(); // a new song is listened to from scratch
             self.look = look(id);
@@ -193,74 +200,63 @@ impl Trip {
         let sym = sat(0.25 + self.feel[2] * 1.2);
         let ring = (1.0 - self.pulse) * 1.4;
         let (ph, travel, pulse, drift, loudness, l) = (self.phase, self.travel, self.pulse, self.drift, self.energy, &self.look);
-        // shortcut: 16 steps per channel so neighbors share one escape code
-        let q = |c: [f64; 3]| c.map(|n| (n.round().clamp(0.0, 255.0) as u8) & 0xf0);
 
-        let rows = (0..h)
-            .map(|j| {
-                let y0 = (j as f64 - h as f64 / 2.0 + 0.5) / (h as f64 / 2.0);
-                // (brightness, flow) of column i
-                let smoke = |i: usize| -> (f64, f64) {
-                    let x0 = (i as f64 - w as f64 / 2.0 + 0.5) / h as f64; // a cell is about twice as tall as wide
-                    // the whole picture wobbles on a slow flow of its own (harder with the bass): never a perfect tunnel
-                    let wob = 0.5 + bass * 0.6;
-                    let x = x0 + ((y0 * 2.3 + ph * 0.9 + l.seed).sin() + ((x0 + y0) * 1.7 - ph * 0.6).sin()) * 0.12 * wob;
-                    let y = y0 + ((x0 * 2.1 - ph * 0.7 + l.seed * 0.7).sin() + ((x0 - y0) * 1.9 + ph * 0.5).sin()) * 0.12 * wob;
-                    let r = x.hypot(y);
-                    let depth = -r.max(0.12).ln() * 1.1; // far in the middle, near at the edges
-                    let a = y.atan2(x) + ph * 0.15 * l.turn + depth * l.twist;
-                    // a point on the tunnel wall: around it (a circle, so there is no seam) and along it (depth)
-                    let (mut cx, mut cy) = (a.cos(), a.sin());
-                    if l.fold > 1 {
-                        // mirror into fold slices, as strongly as the song's dynamics ask (blended on the circle)
-                        let slice = PI * 2.0 / l.fold as f64;
-                        let f = (((a % slice) + slice) % slice - slice / 2.0).abs();
-                        cx += (f.cos() - cx) * sym;
-                        cy += (f.sin() - cy) * sym;
-                    }
-                    cx *= l.scale;
-                    cy *= l.scale;
-                    let z = depth + travel;
-                    let qx = fbm(cx, cy, z * 0.7 + ph, l.seed, 2); // smoke bent by smoke
-                    let mut v = fbm(cx + warp * qx, cy - warp * qx, z + warp * qx * 0.6, l.seed, 3);
-                    v = sat((v - 0.32) * 2.4).powf(1.3); // keep the wisps, drop the haze
-                    v *= 0.6 + band(cy.atan2(cx).abs() / PI) * 0.7; // the spectrum lights it by angle, mirrored
-                    v += 0.3 * pulse * (-((r - ring) * 5.0).powi(2)).exp(); // the beat's ripple
-                    (sat(v * (0.45 + 0.55 * loudness)), qx)
-                };
-                // the smoke is smooth: only every other column is worked out and the ones between are averaged
-                let mut done: Vec<Option<(f64, f64)>> = vec![None; w];
-                let mut at = |i: usize| *done[i].get_or_insert_with(|| smoke(i));
-                let mut line = String::with_capacity(w * 8);
-                let mut last = None;
-                for i in 0..w {
-                    let (v, qx) = if i % 2 == 0 || i + 1 >= w {
-                        at(i - i % 2)
-                    } else {
-                        let (a, b) = (at(i - 1), at(i + 1));
-                        ((a.0 + b.0) / 2.0, (a.1 + b.1) / 2.0)
-                    };
-                    let c = along(pal, l.hue + v * 0.9 + qx * 0.8 + drift);
-                    // never black: the palette color dimmed where the smoke is thin, lifted if the cover is very dark
-                    let mut back = c.map(|n| n * (0.4 + v * 0.6));
-                    let top = back.iter().cloned().fold(0.0, f64::max);
-                    if top < 70.0 {
-                        back = if top > 0.0 { back.map(|n| n * 70.0 / top) } else { [70.0; 3] };
-                    }
-                    let color = (q(c.map(|n| n + (255.0 - n) * (0.3 + v * 0.5))), q(back));
-                    if last != Some(color) {
-                        let ([a, b, c], [d, e, f]) = color;
-                        let _ = write!(line, "\x1b[38;2;{a};{b};{c};48;2;{d};{e};{f}m");
-                        last = Some(color);
-                    }
-                    line.push(RAMP[((v * RAMP.len() as f64) as usize).min(RAMP.len() - 1)] as char);
+        let mut out = Vec::with_capacity(w * h);
+        for j in 0..h {
+            let y0 = (j as f64 - h as f64 / 2.0 + 0.5) / (h as f64 / 2.0);
+            // (brightness, flow) of column i
+            let smoke = |i: usize| -> (f64, f64) {
+                let x0 = (i as f64 - w as f64 / 2.0 + 0.5) / h as f64; // a cell is about twice as tall as wide
+                // the whole picture wobbles on a slow flow of its own (harder with the bass): never a perfect tunnel
+                let wob = 0.5 + bass * 0.6;
+                let x = x0 + ((y0 * 2.3 + ph * 0.9 + l.seed).sin() + ((x0 + y0) * 1.7 - ph * 0.6).sin()) * 0.12 * wob;
+                let y = y0 + ((x0 * 2.1 - ph * 0.7 + l.seed * 0.7).sin() + ((x0 - y0) * 1.9 + ph * 0.5).sin()) * 0.12 * wob;
+                let r = x.hypot(y);
+                let depth = -r.max(0.12).ln() * 1.1; // far in the middle, near at the edges
+                let a = y.atan2(x) + ph * 0.15 * l.turn + depth * l.twist;
+                // a point on the tunnel wall: around it (a circle, so there is no seam) and along it (depth)
+                let (mut cx, mut cy) = (a.cos(), a.sin());
+                if l.fold > 1 {
+                    // mirror into fold slices, as strongly as the song's dynamics ask (blended on the circle)
+                    let slice = PI * 2.0 / l.fold as f64;
+                    let f = (((a % slice) + slice) % slice - slice / 2.0).abs();
+                    cx += (f.cos() - cx) * sym;
+                    cy += (f.sin() - cy) * sym;
                 }
-                line.push_str("\x1b[39;49m");
-                line
-            })
-            .collect();
+                cx *= l.scale;
+                cy *= l.scale;
+                let z = depth + travel;
+                let qx = fbm(cx, cy, z * 0.7 + ph, l.seed, 2); // smoke bent by smoke
+                let mut v = fbm(cx + warp * qx, cy - warp * qx, z + warp * qx * 0.6, l.seed, 3);
+                v = sat((v - 0.32) * 2.4).powf(1.3); // keep the wisps, drop the haze
+                v *= 0.6 + band(cy.atan2(cx).abs() / PI) * 0.7; // the spectrum lights it by angle, mirrored
+                v += 0.3 * pulse * (-((r - ring) * 5.0).powi(2)).exp(); // the beat's ripple
+                (sat(v * (0.45 + 0.55 * loudness)), qx)
+            };
+            // the smoke is smooth: only every other column is worked out and the ones between are averaged
+            let mut done: Vec<Option<(f64, f64)>> = vec![None; w];
+            let mut at = |i: usize| *done[i].get_or_insert_with(|| smoke(i));
+            for i in 0..w {
+                let (v, qx) = if i % 2 == 0 || i + 1 >= w {
+                    at(i - i % 2)
+                } else {
+                    let (a, b) = (at(i - 1), at(i + 1));
+                    ((a.0 + b.0) / 2.0, (a.1 + b.1) / 2.0)
+                };
+                let c = along(pal, l.hue + v * 0.9 + qx * 0.8 + drift);
+                // never black: the palette color dimmed where the smoke is thin, lifted if the cover is very dark
+                let mut back = c.map(|n| n * (0.4 + v * 0.6));
+                let top = back.iter().cloned().fold(0.0, f64::max);
+                if top < 70.0 {
+                    back = if top > 0.0 { back.map(|n| n * 70.0 / top) } else { [70.0; 3] };
+                }
+                let fg = c.map(|n| ((n + (255.0 - n) * (0.3 + v * 0.5)) / 255.0) as f32);
+                let bg = back.map(|n| (n / 255.0).clamp(0.0, 1.0) as f32);
+                out.push(Cell { ch: RAMP[((v * RAMP.len() as f64) as usize).min(RAMP.len() - 1)] as char, fg, bg });
+            }
+        }
         self.smooth = Some(smooth);
-        rows
+        out
     }
 }
 

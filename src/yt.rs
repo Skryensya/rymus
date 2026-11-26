@@ -3,6 +3,7 @@ use crate::item::{clean, Item, Kind};
 use serde_json::{json, Value};
 use std::time::Duration;
 
+#[cfg_attr(test, allow(dead_code))] // tests answer from made up data
 const API: &str = "https://music.youtube.com/youtubei/v1/";
 const SONGS: &str = "EgWKAQIIAWoKEAkQBRAKEAMQBA==";
 const ALBUMS: &str = "EgWKAQIYAWoKEAkQBRAKEAMQBA==";
@@ -14,6 +15,7 @@ pub fn agent() -> ureq::Agent {
 
 #[derive(Clone)]
 pub struct Yt {
+    #[cfg_attr(test, allow(dead_code))]
     agent: ureq::Agent,
 }
 
@@ -230,6 +232,58 @@ pub fn parse_artist(v: &Value, name: &str) -> (Vec<Item>, Vec<Item>) {
     (songs, albums)
 }
 
+// Rows of a playlist page or of one of its continuations: title, artists, album.
+fn parse_playlist_rows(v: &Value) -> Vec<Item> {
+    list_items(v)
+        .into_iter()
+        .map(|x| Item {
+            kind: Kind::Track,
+            id: video_id(x),
+            title: text(column(x, 0)),
+            artist: groups(runs(column(x, 1))).first().map_or(String::new(), |g| names(g)),
+            album: text(column(x, 2)),
+            cover: best_thumb(&x["thumbnail"]),
+            ..Default::default()
+        })
+        .filter(|t| !t.id.is_empty()) // removed or unavailable videos have no id
+        .collect()
+}
+fn next_page(v: &Value) -> Option<String> {
+    let token = first(first(v, "continuationItemRenderer")?, "continuationCommand")?["token"].as_str()?;
+    Some(token.to_string())
+}
+
+// A music video or somebody's upload, as opposed to the song itself ("ATV"). A row that does not say counts as a song.
+fn is_video(entry: &Value) -> bool {
+    let kind = first(&entry["navigationEndpoint"], "musicVideoType").and_then(Value::as_str).unwrap_or("");
+    matches!(kind, "MUSIC_VIDEO_TYPE_OMV" | "MUSIC_VIDEO_TYPE_UGC")
+}
+
+// The songs of a radio, which feeds Discover and the mixes: videos are left out, there are plenty of songs.
+// The artist's picture, square (the page links to a wide banner of it), and the list of all their songs by popularity.
+pub fn parse_artist_head(v: &Value) -> (String, String) {
+    let banner = best_thumb(&v["header"]);
+    let picture = match banner.rsplit_once("=w") {
+        Some((base, _)) => format!("{base}=w544-h544-p-l90-rj"),
+        None => banner,
+    };
+    // the "Top songs" shelf's title and footer lead to that list
+    let songs = all(v, "musicShelfRenderer")
+        .into_iter()
+        .flat_map(|s| [&s["title"], &s["bottomEndpoint"]])
+        .filter_map(|link| first(link, "browseId").and_then(Value::as_str))
+        .find(|id| id.starts_with("VL"))
+        .map_or(String::new(), clean);
+    (picture, songs)
+}
+
+pub struct Artist {
+    pub songs: Vec<Item>,
+    pub albums: Vec<Item>,
+    pub picture: String,
+    pub all_songs: String, // browse id, empty if the page has none
+}
+
 pub fn parse_radio(v: &Value) -> Vec<Item> {
     let mut out: Vec<Item> = Vec::new();
     let Some(panel) = first(v, "playlistPanelRenderer") else { return out };
@@ -237,6 +291,9 @@ pub fn parse_radio(v: &Value) -> Vec<Item> {
         // a "wrapper" entry carries the song and its video version: take the primary one
         let wrapper = &entry["playlistPanelVideoWrapperRenderer"]["primaryRenderer"];
         let Some(x) = first(if wrapper.is_null() { entry } else { wrapper }, "playlistPanelVideoRenderer") else { continue };
+        if is_video(x) {
+            continue;
+        }
         let gs = groups(runs(&x["longBylineText"]));
         let t = Item {
             kind: Kind::Track,
@@ -259,6 +316,11 @@ impl Yt {
         Yt { agent: agent() }
     }
 
+    #[cfg(test)]
+    fn call(&self, endpoint: &str, body: Value) -> Result<Value, String> {
+        Ok(fake::answer(endpoint, &body))
+    }
+    #[cfg(not(test))]
     fn call(&self, endpoint: &str, mut body: Value) -> Result<Value, String> {
         body["context"] = json!({"client": {"clientName": "WEB_REMIX", "clientVersion": "1.20250101.01.00", "hl": "en", "gl": "US"}});
         self.agent
@@ -285,12 +347,87 @@ impl Yt {
     pub fn album(&self, album: &Item) -> Result<Vec<Item>, String> {
         Ok(parse_album(&self.call("browse", json!({"browseId": album.id}))?, album))
     }
-    pub fn artist(&self, id: &str, name: &str) -> Result<(Vec<Item>, Vec<Item>), String> {
-        Ok(parse_artist(&self.call("browse", json!({"browseId": id}))?, name))
+    pub fn artist(&self, id: &str, name: &str) -> Result<Artist, String> {
+        let page = self.call("browse", json!({"browseId": id}))?;
+        let (songs, albums) = parse_artist(&page, name);
+        let (picture, all_songs) = parse_artist_head(&page);
+        Ok(Artist { songs, albums, picture, all_songs })
+    }
+    // The first page (up to 100) of an artist's songs, most played first.
+    pub fn artist_songs(&self, list: &str) -> Result<Vec<Item>, String> {
+        let page = self.call("browse", json!({"browseId": list}))?;
+        Ok(first(&page, "musicPlaylistShelfRenderer").map_or(Vec::new(), parse_playlist_rows))
+    }
+    // (name, songs, whether there were more than we read)
+    pub fn playlist(&self, id: &str) -> Result<(String, Vec<Item>, bool), String> {
+        const MOST: usize = 2000;
+        let page = self.call("browse", json!({"browseId": format!("VL{id}")}))?;
+        let name = ["musicResponsiveHeaderRenderer", "musicDetailHeaderRenderer"]
+            .iter()
+            .find_map(|k| first(&page, k))
+            .map_or(String::new(), |h| text(&h["title"]));
+        let shelf = first(&page, "musicPlaylistShelfRenderer").ok_or("this playlist cannot be read (is it public?)")?;
+        let mut tracks = parse_playlist_rows(shelf);
+        let mut token = next_page(shelf);
+        while let Some(t) = token.take().filter(|_| tracks.len() < MOST) {
+            let more = self.call("browse", json!({"continuation": t}))?;
+            let rows = parse_playlist_rows(&more);
+            if !rows.is_empty() {
+                token = next_page(&more);
+                tracks.extend(rows);
+            }
+        }
+        let partial = tracks.len() >= MOST;
+        Ok((name, tracks, partial))
     }
     pub fn radio(&self, video: &str) -> Result<Vec<Item>, String> {
         let body = json!({"videoId": video, "playlistId": format!("RDAMVM{video}"), "isAudioOnly": true});
         Ok(parse_radio(&self.call("next", body)?))
+    }
+}
+
+// The made up YouTube Music the tests run against: three results for any search, a radio and a playlist.
+#[cfg(test)]
+mod fake {
+    use super::{ALBUMS, ARTISTS};
+    use serde_json::{json, Value};
+
+    fn row(id: &str, title: &str, artist: &str) -> Value {
+        let column = |t: &str| json!({"musicResponsiveListItemFlexColumnRenderer": {"text": {"runs": [{"text": t}]}}});
+        json!({"musicResponsiveListItemRenderer": {"playlistItemData": {"videoId": id}, "flexColumns": [column(title), column(artist)]}})
+    }
+    fn radio_entry(id: &str, title: &str, kind: &str) -> Value {
+        json!({"playlistPanelVideoRenderer": {"videoId": id, "title": {"runs": [{"text": title}]}, "longBylineText": {"runs": [{"text": "Radio Band"}]},
+            "navigationEndpoint": {"watchEndpoint": {"musicVideoType": format!("MUSIC_VIDEO_TYPE_{kind}")}}}})
+    }
+
+    pub fn answer(endpoint: &str, body: &Value) -> Value {
+        match endpoint {
+            "search" if body["params"] == ARTISTS && body["query"] == "Band" => json!({"rows": [{"musicResponsiveListItemRenderer": {
+                "navigationEndpoint": {"browseEndpoint": {"browseId": "UCband"}},
+                "flexColumns": [{"musicResponsiveListItemFlexColumnRenderer": {"text": {"runs": [{"text": "Band"}]}}}]}}]}),
+            "browse" if body["browseId"] == "UCband" => json!({"musicShelfRenderer": {"title": {"runs": [{"text": "Top songs",
+                "navigationEndpoint": {"browseEndpoint": {"browseId": "VLall"}}}]}, "contents": [row("t1", "Hit", "Band")]}}),
+            "browse" if body["browseId"] == "VLall" => json!({"musicPlaylistShelfRenderer": {"contents": [row("t1", "Hit", "Band"),
+                row("t2", "Hit (Live)", "Band"), row("t3", "Deep Cut", "Band"), row("g", "Guest Spot", "Someone Else"), row("t4", "Closer", "Band")]}}),
+            // an album: "Long Road" by Band, 2019, three songs
+            "search" if body["params"] == ALBUMS && body["query"] == "record" => json!({"rows": [{"musicResponsiveListItemRenderer": {
+                "navigationEndpoint": {"browseEndpoint": {"browseId": "MPREroad"}},
+                "thumbnail": {"thumbnails": [{"url": "test://road", "width": 120}]},
+                "flexColumns": [{"musicResponsiveListItemFlexColumnRenderer": {"text": {"runs": [{"text": "Long Road"}]}}},
+                    {"musicResponsiveListItemFlexColumnRenderer": {"text": {"runs": [{"text": "Album"}, {"text": " • "}, {"text": "Band"}, {"text": " • "}, {"text": "2019"}]}}}]}}]}),
+            "browse" if body["browseId"] == "MPREroad" => json!({"musicShelfRenderer": {"contents": [row("a1", "Opening", ""), row("a2", "Middle", ""), row("a3", "Ending", "")]}}),
+            "search" if body["params"] == ALBUMS || body["params"] == ARTISTS => json!({}),
+            "search" => json!({"rows": [row("s1", "Result One", "Band"), row("s2", "Result Two", "Band"), row("s3", "Result Three", "Band")]}),
+            "next" => {
+                let seed = body["videoId"].as_str().unwrap_or("");
+                json!({"playlistPanelRenderer": {"contents": [radio_entry(seed, "Result One", "ATV"), radio_entry("r1", "Similar A", "ATV"),
+                    radio_entry("clip", "Official Video", "OMV"), radio_entry("r2", "Similar B", "ATV"), radio_entry("r3", "Similar C", "ATV"),
+                    radio_entry("r4", "Similar D", "ATV"), radio_entry("r5", "Similar E", "ATV")]}})
+            }
+            _ => json!({"musicResponsiveHeaderRenderer": {"title": {"runs": [{"text": "Road Songs"}]}},
+                "musicPlaylistShelfRenderer": {"contents": [row("p1", "Track One", "Driver"), row("p2", "Track Two", "Driver")]}}),
+        }
     }
 }
 
@@ -309,6 +446,10 @@ mod tests {
         let radio = json!({"playlistPanelRenderer": {"contents": [{"playlistPanelVideoWrapperRenderer": {
             "counterpart": [{"counterpartRenderer": video("video")}], "primaryRenderer": video("song")}}, video("plain")]}});
         assert_eq!(parse_radio(&radio).iter().map(|t| t.id.as_str()).collect::<Vec<_>>(), ["song", "plain"]);
+        let kind = |id: &str, kind: &str| json!({"playlistPanelVideoRenderer": {"videoId": id,
+            "navigationEndpoint": {"watchEndpoint": {"x": {"musicVideoType": format!("MUSIC_VIDEO_TYPE_{kind}")}}}}});
+        let radio = json!({"playlistPanelRenderer": {"contents": [kind("clip", "OMV"), kind("upload", "UGC"), kind("audio", "ATV")]}});
+        assert_eq!(parse_radio(&radio).iter().map(|t| t.id.as_str()).collect::<Vec<_>>(), ["audio"]);
     }
 
     #[test]

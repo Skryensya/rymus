@@ -37,6 +37,18 @@ pub fn parse_lrc(lrc: &str) -> Vec<(f64, String)> {
     out
 }
 
+// Karaoke's countdown to the next line: the time from the start of the line being sung (`start`) to the start of
+// the next one (`next`) is cut in DOTS + 1 equal parts. The dots start empty and one fills at the end of each part,
+// so they are all full for the last part, just before the next line. Returns how many are filled at `pos`.
+pub const DOTS: usize = 4;
+pub fn dots_filled(pos: f64, start: f64, next: f64) -> usize {
+    if next <= start {
+        return 0;
+    }
+    let done = ((pos - start) / (next - start)).clamp(0.0, 0.999);
+    (done * (DOTS + 1) as f64) as usize
+}
+
 // Word wrap to w terminal columns; a word longer than a row is split.
 pub fn wrap(text: &str, w: usize) -> Vec<String> {
     let mut rows = Vec::new();
@@ -127,6 +139,15 @@ pub fn fetch(track: &Item, duration: f64) -> Lyrics {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn karaoke_dots_fill_in_equal_steps() {
+        // a line from 10 s to 20 s: empty, then a dot more every 2 s, all four for the last 2 s
+        let at = [10.0, 11.9, 12.0, 13.9, 14.0, 15.9, 16.0, 17.9, 18.0, 19.9, 20.0];
+        assert_eq!(at.map(|p| dots_filled(p, 10.0, 20.0)), [0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 4]);
+        assert_eq!(dots_filled(5.0, 10.0, 20.0), 0, "before the line, all empty");
+        assert_eq!(dots_filled(12.0, 10.0, 10.0), 0, "no time between them, nothing filled");
+    }
     use serde_json::json;
 
     #[test]

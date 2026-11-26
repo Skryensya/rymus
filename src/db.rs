@@ -13,7 +13,7 @@ pub fn now_ms() -> i64 {
 
 pub fn default_path() -> PathBuf {
     std::env::var_os("YM_DB").map(PathBuf::from).unwrap_or_else(|| {
-        PathBuf::from(std::env::var_os("HOME").unwrap_or_default()).join(".ymus").join("ymus.db")
+        crate::platform::home_dir().join(".ymus").join("ymus.db")
     })
 }
 
@@ -58,8 +58,7 @@ fn track(r: &Row) -> rusqlite::Result<Item> {
 impl Db {
     pub fn open(path: &std::path::Path) -> rusqlite::Result<Db> {
         if let Some(dir) = path.parent() {
-            use std::os::unix::fs::DirBuilderExt;
-            let _ = std::fs::DirBuilder::new().recursive(true).mode(0o700).create(dir);
+            crate::platform::private_dir(dir);
         }
         let c = Connection::open(path)?;
         c.busy_timeout(Duration::from_secs(5))?; // worker threads open their own connection
@@ -71,6 +70,8 @@ impl Db {
              CREATE TABLE IF NOT EXISTS plays(id INTEGER PRIMARY KEY, track_id TEXT NOT NULL REFERENCES tracks(id),
                at INTEGER NOT NULL, seconds INTEGER NOT NULL DEFAULT 0);
              CREATE INDEX IF NOT EXISTS plays_at ON plays(at DESC);
+             CREATE TABLE IF NOT EXISTS playlists(id INTEGER PRIMARY KEY, name TEXT NOT NULL, source TEXT, at INTEGER NOT NULL);
+             CREATE TABLE IF NOT EXISTS playlist_tracks(id INTEGER PRIMARY KEY, playlist_id INTEGER NOT NULL, track_id TEXT NOT NULL REFERENCES tracks(id));
              CREATE TABLE IF NOT EXISTS searches(q TEXT PRIMARY KEY, at INTEGER NOT NULL);
              CREATE TABLE IF NOT EXISTS settings(k TEXT PRIMARY KEY, v TEXT);
              CREATE TABLE IF NOT EXISTS cache(k TEXT PRIMARY KEY, v TEXT, at INTEGER NOT NULL);",
@@ -141,7 +142,7 @@ impl Db {
         self.rows("SELECT t.* FROM likes l JOIN tracks t ON t.id=l.track_id ORDER BY l.at DESC, l.rowid DESC", [], track)
     }
     pub fn disliked(&self) -> Vec<Item> {
-        self.rows("SELECT t.* FROM dislikes d JOIN tracks t ON t.id=d.track_id", [], track)
+        self.rows("SELECT t.* FROM dislikes d JOIN tracks t ON t.id=d.track_id ORDER BY d.at DESC, d.rowid DESC", [], track)
     }
 
     pub fn start_play(&self, t: &Item, at: i64) -> i64 {
@@ -235,17 +236,23 @@ impl Db {
             .unwrap_or(0)
     }
 
+    // (when, seconds heard) of every play since a moment, for the charts.
+    pub fn listening(&self, since: i64) -> Vec<(i64, i64)> {
+        let Ok(mut q) = self.c.prepare("SELECT at, seconds FROM plays WHERE at >= ? AND seconds > 0") else { return vec![] };
+        q.query_map([since], |r| Ok((r.get(0)?, r.get(1)?))).map(|rows| rows.flatten().collect()).unwrap_or_default()
+    }
+
     // Top songs, artists and albums by time listened since a moment.
     pub fn recap(&self, since: i64) -> Recap {
         let rows = self.rows(
-            "SELECT t.*, COUNT(*) AS plays, SUM(p.seconds) AS seconds FROM plays p JOIN tracks t ON t.id = p.track_id
-             WHERE p.at >= ? AND p.seconds > 0 GROUP BY t.id ORDER BY seconds DESC, plays DESC, t.title",
+            "SELECT t.*, SUM(p.seconds) AS seconds FROM plays p JOIN tracks t ON t.id = p.track_id
+             WHERE p.at >= ? AND p.seconds > 0 GROUP BY t.id ORDER BY seconds DESC, t.title",
             [since],
-            |r| Ok(Item { plays: r.get("plays")?, seconds: r.get("seconds")?, ..track(r)? }),
+            |r| Ok(Item { seconds: r.get("seconds")?, ..track(r)? }),
         );
         let rank = |mut list: Vec<Item>| {
             list.sort_by(|a, b| {
-                b.seconds.cmp(&a.seconds).then(b.plays.cmp(&a.plays)).then_with(|| a.title.to_lowercase().cmp(&b.title.to_lowercase()))
+                b.seconds.cmp(&a.seconds).then_with(|| a.title.to_lowercase().cmp(&b.title.to_lowercase())) // time only, never play counts
             });
             list.truncate(100);
             list
@@ -260,7 +267,6 @@ impl Db {
                         out.len() - 1
                     });
                     let g = &mut out[i];
-                    g.plays += r.plays;
                     g.seconds += r.seconds;
                     if g.cover.is_empty() {
                         g.cover = r.cover.clone(); // rows come longest first
@@ -286,54 +292,83 @@ impl Db {
         Recap { songs: rank(rows.clone()), artists, albums }
     }
 
-    // Favorites = what you play plus what you like (a like weighs as much as 3 plays).
-    pub fn top_tracks(&self, limit: i64) -> Vec<Item> {
+    // The last songs played, each once, newest first.
+    pub fn recent(&self, limit: i64) -> Vec<Item> {
         self.rows(
-            "SELECT * FROM (
-               SELECT t.*, (SELECT COUNT(*) FROM plays p WHERE p.track_id = t.id) AS plays,
-                      (SELECT MAX(at) FROM plays p WHERE p.track_id = t.id) AS last_at,
-                      EXISTS(SELECT 1 FROM likes l WHERE l.track_id = t.id) AS liked
-               FROM tracks t WHERE t.id NOT IN (SELECT track_id FROM dislikes))
-             WHERE plays > 0 OR liked
-             ORDER BY plays + 3 * liked DESC, last_at DESC, id LIMIT ?",
+            "SELECT t.* FROM tracks t JOIN (SELECT track_id, MAX(at) AS last_at, MAX(id) AS last FROM plays GROUP BY track_id) p
+             ON p.track_id = t.id ORDER BY p.last_at DESC, p.last DESC LIMIT ?",
             [limit],
-            |r| Ok(Item { plays: r.get("plays")?, ..track(r)? }),
+            track,
         )
     }
 
-    // shortcut: artists are split from the stored "A, B" credit string, so a name containing ", " counts as two
-    pub fn top_artists(&self) -> Vec<Item> {
-        let rows = self.rows(
-            "SELECT t.id, t.title, t.artist, t.album, t.cover,
-               (SELECT COUNT(*) FROM plays p WHERE p.track_id = t.id) AS plays,
-               (SELECT COUNT(*) FROM likes l WHERE l.track_id = t.id) AS likes FROM tracks t
-             WHERE t.id NOT IN (SELECT track_id FROM dislikes)",
+    // ---------- playlists ----------
+    pub fn playlists(&self) -> Vec<Item> {
+        self.rows(
+            "SELECT p.id, p.name, p.source, COUNT(e.id) AS songs,
+               (SELECT t.cover FROM playlist_tracks f JOIN tracks t ON t.id = f.track_id WHERE f.playlist_id = p.id AND t.cover IS NOT NULL ORDER BY f.id LIMIT 1) AS cover
+             FROM playlists p LEFT JOIN playlist_tracks e ON e.playlist_id = p.id GROUP BY p.id ORDER BY p.at DESC, p.id DESC",
             [],
-            |r| Ok(Item { plays: r.get("plays")?, likes: r.get("likes")?, ..track(r)? }),
-        );
-        let mut at: HashMap<String, usize> = HashMap::new();
-        let mut out: Vec<(Item, i64)> = Vec::new(); // artist, score of the track its cover came from
-        for r in &rows {
-            for name in r.artist.split(", ").filter(|n| !n.is_empty()) {
-                let i = *at.entry(name.to_string()).or_insert_with(|| {
-                    out.push((Item { kind: Kind::ArtistStat, id: name.into(), title: name.into(), ..Default::default() }, -1));
-                    out.len() - 1
-                });
-                let (a, best) = &mut out[i];
-                a.plays += r.plays;
-                a.likes += r.likes;
-                let score = r.plays + 3 * r.likes;
-                if !r.cover.is_empty() && score > *best {
-                    a.cover = r.cover.clone(); // artist art = cover of their favorite track
-                    *best = score;
-                }
-            }
+            |r| {
+                let source: Option<String> = r.get("source")?;
+                let songs: i64 = r.get("songs")?;
+                let from = match source.as_deref() {
+                    Some(s) if s.contains("spotify") => " · from Spotify",
+                    Some(_) => " · from YouTube Music",
+                    None => "",
+                };
+                Ok(Item {
+                    kind: Kind::Playlist,
+                    id: r.get::<_, i64>("id")?.to_string(),
+                    title: r.get("name")?,
+                    cover: r.get::<_, Option<String>>("cover")?.unwrap_or_default(),
+                    detail: Some(format!("{songs} song{}{from}", if songs == 1 { "" } else { "s" })),
+                    ..Default::default()
+                })
+            },
+        )
+    }
+    // A playlist's songs in order; `uid` is the entry, since a song can be in it twice.
+    pub fn playlist_tracks(&self, playlist: i64) -> Vec<Item> {
+        self.rows(
+            "SELECT t.*, e.id AS entry FROM playlist_tracks e JOIN tracks t ON t.id = e.track_id WHERE e.playlist_id = ? ORDER BY e.id",
+            [playlist],
+            |r| Ok(Item { uid: r.get::<_, i64>("entry")? as u64, ..track(r)? }),
+        )
+    }
+    pub fn playlist_from(&self, source: &str) -> Option<(i64, String)> {
+        self.c.query_row("SELECT id, name FROM playlists WHERE source=?", [source], |r| Ok((r.get(0)?, r.get(1)?))).optional().ok().flatten()
+    }
+    // All or nothing: a playlist is never left half written.
+    pub fn create_playlist(&self, name: &str, source: Option<&str>, tracks: &[Item]) -> Option<i64> {
+        let all = self.c.unchecked_transaction().ok()?;
+        all.execute("INSERT INTO playlists(name, source, at) VALUES(?,?,?)", params![name, source, now_ms()]).ok()?;
+        let id = all.last_insert_rowid();
+        for t in tracks {
+            self.save_track(t);
+            all.execute("INSERT INTO playlist_tracks(playlist_id, track_id) VALUES(?,?)", params![id, t.id]).ok()?;
         }
-        let score = |a: &Item| a.plays + 3 * a.likes;
-        let mut list: Vec<Item> = out.into_iter().map(|x| x.0).filter(|a| score(a) > 0).collect();
-        list.sort_by(|x, y| score(y).cmp(&score(x)).then_with(|| x.title.to_lowercase().cmp(&y.title.to_lowercase())));
-        list.truncate(30);
-        list
+        all.commit().ok()?;
+        Some(id)
+    }
+    // False if the song was already there.
+    pub fn add_to_playlist(&self, playlist: i64, t: &Item) -> bool {
+        self.save_track(t);
+        self.exec(
+            "INSERT INTO playlist_tracks(playlist_id, track_id) SELECT ?1, ?2
+             WHERE NOT EXISTS (SELECT 1 FROM playlist_tracks WHERE playlist_id = ?1 AND track_id = ?2)",
+            params![playlist, t.id],
+        ) > 0
+    }
+    pub fn remove_entry(&self, entry: u64) {
+        self.exec("DELETE FROM playlist_tracks WHERE id=?", [entry as i64]);
+    }
+    pub fn rename_playlist(&self, playlist: i64, name: &str) {
+        self.exec("UPDATE playlists SET name=? WHERE id=?", params![name, playlist]);
+    }
+    pub fn delete_playlist(&self, playlist: i64) {
+        self.exec("DELETE FROM playlist_tracks WHERE playlist_id=?", [playlist]);
+        self.exec("DELETE FROM playlists WHERE id=?", [playlist]);
     }
 }
 
@@ -366,10 +401,7 @@ mod tests {
         db.end_play(p, 42, None, false);
         db.start_play(&b, now_ms());
         db.toggle_like(&song("ccc", "Y, Z", "Al2"));
-        assert_eq!(ids(&db.top_tracks(50)), ["bbb", "ccc", "aaa"]);
-        let artists = db.top_artists();
-        assert_eq!(artists.iter().map(|a| a.title.as_str()).collect::<Vec<_>>(), ["Y", "Z", "X"]);
-        assert_eq!((artists[0].plays, artists[0].likes, artists[2].cover.as_str()), (1, 2, "http://c/1"));
+        assert_eq!(ids(&db.recent(50)), ["bbb", "aaa"]);
         db.save_search("daft punk");
         db.save_search("boards of canada");
         db.save_search("daft punk");
@@ -378,7 +410,25 @@ mod tests {
         db.set_setting("k", "2");
         assert_eq!(db.get_setting("k").as_deref(), Some("2"));
         assert!(db.toggle_dislike(&b));
-        assert!(!db.liked_ids().contains("bbb") && !ids(&db.top_tracks(50)).contains(&"bbb"));
+        assert!(!db.liked_ids().contains("bbb"));
+    }
+
+    #[test]
+    fn playlists() {
+        let db = temp_db("playlists");
+        let (a, b) = (Item { cover: "http://c/a".into(), ..song("a", "X", "") }, song("b", "Y", ""));
+        let id = db.create_playlist("Mine", Some("https://open.spotify.com/playlist/1"), &[a.clone(), b.clone(), a.clone()]).unwrap();
+        assert_eq!(ids(&db.playlist_tracks(id)), ["a", "b", "a"]);
+        assert_eq!(db.playlist_from("https://open.spotify.com/playlist/1"), Some((id, "Mine".to_string())));
+        db.remove_entry(db.playlist_tracks(id)[0].uid); // only that one of the two
+        assert_eq!(ids(&db.playlist_tracks(id)), ["b", "a"]);
+        assert!(!db.add_to_playlist(id, &b));
+        assert!(db.add_to_playlist(id, &song("c", "Z", "")));
+        db.rename_playlist(id, "Renamed");
+        let all = db.playlists();
+        assert_eq!((all[0].title.as_str(), all[0].cover.as_str(), all[0].detail.as_deref()), ("Renamed", "http://c/a", Some("3 songs · from Spotify")));
+        db.delete_playlist(id);
+        assert!(db.playlists().is_empty() && db.playlist_tracks(id).is_empty());
     }
 
     #[test]
@@ -394,7 +444,7 @@ mod tests {
         assert_eq!([7, 30, 365].map(|d| db.listened(now_ms() - d * day)), [200, 700, 750]);
         let month = db.recap(now_ms() - 30 * day);
         assert_eq!(ids(&month.songs), ["s2", "s1"]);
-        assert_eq!((month.songs[1].seconds, month.songs[1].plays), (200, 2));
+        assert_eq!(month.songs[1].seconds, 200); // two plays of 100 s
         assert_eq!(month.artists.iter().map(|a| (a.title.as_str(), a.seconds)).collect::<Vec<_>>(), [("B", 700), ("A", 200)]);
         assert_eq!(month.albums.iter().map(|a| (a.title.as_str(), a.artist.as_str())).collect::<Vec<_>>(), [("Two", "B"), ("One", "A")]);
         db.toggle_like(&song("s1", "A, B", "")); // a later save without an album keeps the known one

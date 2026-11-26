@@ -8,7 +8,7 @@ pub const BANDS: usize = 32;
 const LOW: f64 = 50.0;
 const HIGH: f64 = 14000.0; // Hz, bands are spaced logarithmically (by pitch)
 
-pub fn graph() -> String {
+pub fn graph(out: &str) -> String {
     let freqs: Vec<i64> = (0..BANDS).map(|i| (LOW * (HIGH / LOW).powf(i as f64 / (BANDS - 1) as f64)).round() as i64).collect();
     let labels = |p: &str| (0..BANDS).map(|i| format!("[{p}{i}]")).collect::<String>();
     let mut parts = vec![
@@ -23,15 +23,15 @@ pub fn graph() -> String {
     }
     parts.push(format!(
         "[orig]{}amerge=inputs={},astats=metadata=1:reset=1:measure_perchannel=RMS_level:measure_overall=none,\
-         ametadata=mode=print:file='pipe\\:3':direct=1,pan=stereo|c0=c0|c1=c1",
+         ametadata=mode=print:file='{out}':direct=1,pan=stereo|c0=c0|c1=c1",
         labels("b"),
         BANDS + 1
     ));
     parts.join(";")
 }
 
-pub fn filter() -> String {
-    let g = graph();
+pub fn filter(out: &str) -> String {
+    let g = graph(out);
     format!("@viz:lavfi=graph=%{}%{g}", g.len()) // %n% = mpv's quoting for a value with [ ] ; in it
 }
 

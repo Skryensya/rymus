@@ -1,0 +1,274 @@
+// Everything that waits on the network (search, albums, artists, mixes) runs on its own thread and comes back as a page.
+use super::*;
+
+impl App {
+    // Runs on its own thread with the spinner on; errors land in the red message.
+    pub(super) fn run_busy(&mut self, label: String, work: impl FnOnce() -> Result<Apply, String> + Send + 'static) {
+        self.busy = label.clone();
+        self.msg.clear();
+        let tx = self.tx.clone();
+        std::thread::spawn(move || {
+            let result = work();
+            let _ = tx.send(Msg::Apply(Box::new(move |app: &mut App| {
+                match result {
+                    Ok(apply) => apply(app),
+                    Err(e) => app.msg = format!("{} failed: {e}", label.replace('…', "")),
+                }
+                app.busy.clear();
+            })));
+        });
+    }
+
+    // Search results replace the body of whatever tab you were on; Esc (or any tab) brings it back.
+    pub(super) fn open_results(&mut self) {
+        self.show_lists(); // results that arrive while something else is open replace it
+        if self.tab == Tab::Search {
+            return;
+        }
+        if self.tab == Tab::Home {
+            self.remember_home_sel();
+        }
+        if self.tab == Tab::Playlists {
+            self.playlists_sel = self.sel;
+        }
+        self.prev_tab = self.tab;
+        self.tab = Tab::Search;
+        self.menu = None;
+        self.lyrics = false;
+    }
+    pub(super) fn reopen_results(&mut self) {
+        if self.items.is_empty() || self.tab == Tab::Search {
+            return;
+        }
+        self.open_results();
+        self.sel = self.search_sel.min(self.items.len() - 1);
+    }
+    pub(super) fn set_list(&mut self, title: String, items: Vec<Item>, numbered: bool, sel: usize) {
+        self.title = title;
+        self.items = items;
+        self.numbered = numbered;
+        self.sel = sel;
+        self.head = None;
+        self.list_id = self.id();
+    }
+    pub(super) fn push_back(&mut self) {
+        self.back.push(Saved { items: std::mem::take(&mut self.items), title: std::mem::take(&mut self.title), numbered: self.numbered, sel: self.sel, list_id: self.list_id, head: self.head.take() });
+    }
+    // Show a list on top of the current tab; from inside the results, Esc returns to where you were.
+    pub(super) fn enter_list(&mut self, title: String, items: Vec<Item>, numbered: bool, sel: usize) {
+        if self.tab == Tab::Search {
+            self.push_back();
+        } else {
+            self.open_results();
+            self.back.clear();
+        }
+        self.set_list(title, items, numbered, sel);
+    }
+    pub(super) fn go_back(&mut self) {
+        if let Some(s) = self.back.pop() {
+            self.items = s.items;
+            self.title = s.title;
+            self.numbered = s.numbered;
+            self.sel = s.sel;
+            self.list_id = s.list_id;
+            self.head = s.head;
+        }
+    }
+
+    pub(super) fn run_search(&mut self, text: String) {
+        self.db.save_search(&text);
+        let yt = self.yt.clone();
+        self.run_busy("Searching…".into(), move || {
+            let (artists, albums, songs) = std::thread::scope(|s| {
+                let a = s.spawn(|| yt.artists(&text));
+                let b = s.spawn(|| yt.albums(&text));
+                let c = yt.songs(&text);
+                let join = |r: std::thread::Result<Result<Vec<Item>, String>>| r.unwrap_or_else(|_| Err("search thread failed".into()));
+                (join(a.join()), join(b.join()), c)
+            });
+            let head = |mut v: Vec<Item>, n: usize| {
+                v.truncate(n);
+                v
+            };
+            let rows = grouped(vec![("Artists", head(artists?, 3)), ("Albums", head(albums?, 6)), ("Songs", head(songs?, 20))]);
+            Ok(Box::new(move |app: &mut App| {
+                app.query = text.clone();
+                app.open_results();
+                app.back.clear();
+                if rows.is_empty() {
+                    app.msg = "Nothing found".into();
+                }
+                let sel = usize::from(!rows.is_empty()); // row 0 is a header
+                app.set_list(format!("Results for \"{text}\""), rows, false, sel);
+                app.result_lists.insert(app.list_id);
+            }) as Apply)
+        });
+    }
+
+    pub(super) fn album_page(yt: &Yt, album: Item) -> Result<Apply, String> {
+        let tracks = yt.album(&album)?;
+        Ok(Box::new(move |app: &mut App| {
+            let button = |id: &str, title: &str| Item { kind: Kind::Button, id: id.into(), title: title.into(), cover: album.cover.clone(), ..Default::default() };
+            let mut rows = vec![button("play", "▶ Play album"), button("shuffle", "⤮ Shuffle"), Item::header("Songs")];
+            rows.extend(tracks);
+            app.enter_list(format!("{} · {}", album.title, album.author), rows, true, 0);
+            app.head = Some(album);
+        }))
+    }
+    pub(super) fn open_album(&mut self, album: Item) {
+        let yt = self.yt.clone();
+        self.run_busy("Loading album…".into(), move || App::album_page(&yt, album));
+    }
+    // An album known only by name and artist (Stats).
+    pub(super) fn go_album(&mut self, it: Item) {
+        let yt = self.yt.clone();
+        self.run_busy("Loading album…".into(), move || {
+            let found = yt.albums(&format!("{} {}", it.title, it.artist))?;
+            let wanted = it.title.to_lowercase();
+            let a = found.iter().find(|a| a.title.to_lowercase() == wanted).or(found.first()).cloned();
+            match a {
+                Some(mut a) => {
+                    if a.author.is_empty() {
+                        a.author = it.artist.clone();
+                    }
+                    App::album_page(&yt, a)
+                }
+                None => Ok(Box::new(move |app: &mut App| app.msg = format!("No album found: {}", it.title)) as Apply),
+            }
+        });
+    }
+    // The artist's page: "This is …", popular songs, albums; their picture on the side.
+    pub(super) fn artist_page(yt: &Yt, id: &str, name: String) -> Result<Apply, String> {
+        let page = yt.artist(id, &name)?;
+        Ok(Box::new(move |app: &mut App| {
+            if page.songs.is_empty() && page.albums.is_empty() {
+                app.msg = "Nothing found for this artist".into();
+                return;
+            }
+            let mut rows = vec![Item {
+                kind: Kind::Button,
+                id: "thisis".into(),
+                title: format!("✦ This is {name}"),
+                author: name.clone(),
+                album: page.all_songs.clone(),
+                cover: page.picture.clone(),
+                ..Default::default()
+            }];
+            rows.extend(grouped(vec![("Popular songs", page.songs), ("Albums", page.albums)]));
+            app.enter_list(name.clone(), rows, false, 0);
+            app.head = Some(Item { kind: Kind::Artist, title: name, cover: page.picture, ..Default::default() });
+        }))
+    }
+    // The artist's essential songs, put together when asked for: their most played, one version of each.
+    pub(super) fn this_is(&mut self, button: Item) {
+        let yt = self.yt.clone();
+        self.run_busy(format!("Building This is {}…", button.author), move || {
+            let found = if button.album.is_empty() { yt.songs(&button.author)? } else { yt.artist_songs(&button.album)? };
+            let tracks = essentials(found, &button.author);
+            Ok(Box::new(move |app: &mut App| {
+                if tracks.is_empty() {
+                    app.msg = format!("No songs found for {}", button.author);
+                    return;
+                }
+                let title = format!("This is {}", button.author);
+                let play = |id: &str, label: &str| Item { kind: Kind::Button, id: id.into(), title: label.into(), cover: button.cover.clone(), ..Default::default() };
+                let mut rows = vec![play("play", "▶ Play"), play("shuffle", "⤮ Shuffle"), Item::header("Songs")];
+                rows.extend(tracks);
+                app.enter_list(title.clone(), rows, true, 0);
+                app.head = Some(Item { kind: Kind::Album, title, author: button.author, cover: button.cover, ..Default::default() });
+            }) as Apply)
+        });
+    }
+    pub(super) fn open_artist(&mut self, artist: Item) {
+        let yt = self.yt.clone();
+        self.run_busy("Loading artist…".into(), move || App::artist_page(&yt, &artist.id, artist.title));
+    }
+    // Open an artist known only by name (Home, and "Go to artist" on a song).
+    pub(super) fn go_artist(&mut self, credit: &str) {
+        let name = credit.split(", ").next().unwrap_or("").to_string();
+        self.typing = false;
+        let yt = self.yt.clone();
+        self.run_busy("Loading artist…".into(), move || {
+            let found = yt.artists(&name)?;
+            let wanted = name.to_lowercase();
+            match found.iter().find(|a| a.title.to_lowercase() == wanted).or(found.first()) {
+                Some(a) => App::artist_page(&yt, &a.id, a.title.clone()),
+                None => Ok(Box::new(move |app: &mut App| app.msg = format!("No artist found: {name}")) as Apply),
+            }
+        });
+    }
+
+    // The Discover view: one mix of everything at once, and a mix per style as soon as they are worked out.
+    pub(super) fn open_discover(&mut self) {
+        if self.db.heard().is_empty() {
+            self.msg = "Play or like a few songs first".into();
+            return;
+        }
+        self.open_results();
+        self.back.clear();
+        let all = mix_row("all", "✦ Everything new".into(), "from all your taste".into(), Spec::All);
+        self.set_list("Discover · only songs you have not heard".into(), vec![all, Item::header("Reading your styles…")], false, 0);
+        let (list, path, tx) = (self.list_id, self.db_path.clone(), self.tx.clone());
+        std::thread::spawn(move || {
+            let rows = match mixes::find_styles(&path) {
+                Ok(found) if found.is_empty() => vec![Item::header("No styles yet: listen to more artists")],
+                Ok(found) => std::iter::once(Item::header("By style"))
+                    .chain(found.into_iter().map(|s| {
+                        let who = s.artists.iter().take(3).cloned().collect::<Vec<_>>().join(", ");
+                        mix_row(&s.name, format!("✦ {}", s.name), who, Spec::Style(s.artists))
+                    }))
+                    .collect(),
+                Err(e) => vec![Item::header(&format!("Styles unavailable: {e}"))],
+            };
+            let _ = tx.send(Msg::Apply(Box::new(move |app: &mut App| {
+                // the view may be open, or waiting behind Esc
+                let items = if app.list_id == list { Some(&mut app.items) } else { app.back.iter_mut().find(|s| s.list_id == list).map(|s| &mut s.items) };
+                if let Some(items) = items {
+                    items.truncate(1);
+                    items.extend(rows);
+                }
+            })));
+        });
+    }
+
+    pub(super) fn play_mix(&mut self, spec: Spec, label: String) {
+        if !self.busy.is_empty() {
+            return;
+        }
+        let (yt, path) = (self.yt.clone(), self.db_path.clone());
+        self.run_busy(format!("Building {label}…"), move || {
+            let mix = mixes::build_mix(&yt, &path, &spec)?;
+            Ok(Box::new(move |app: &mut App| {
+                if mix.tracks.is_empty() {
+                    app.msg = "Nothing new found, try another mix".into();
+                    return;
+                }
+                let fresh = mix.tracks.iter().filter(|t| t.fresh).count();
+                let without = if mix.without_listenbrainz { " · without ListenBrainz" } else { "" };
+                app.play(mix.tracks);
+                app.set_tab(Tab::Queue);
+                app.set_note(format!("{label}: {fresh} new songs{without}"));
+            }) as Apply)
+        });
+    }
+    // A mix of new songs around whatever a row is (or the playing song).
+    pub(super) fn start_radio(&mut self, it: Option<Item>) {
+        use Kind::*;
+        let it = it
+            .filter(|t| matches!(t.kind, Track | Artist | ArtistStat | Album | AlbumStat))
+            .or_else(|| self.now().cloned().map(|t| Item { kind: Track, ..t }));
+        let Some(it) = it else { return self.set_note("Nothing to start a radio from".into()) };
+        if it.kind == Track {
+            let label = format!("Radio · {}", it.title);
+            let seed = Item { id: it.id, title: it.title, artist: it.artist, album: it.album, cover: it.cover, ..Default::default() };
+            return self.play_mix(Spec::RadioTrack(Box::new(seed)), label);
+        }
+        let artist = match it.kind {
+            Album => it.author,
+            AlbumStat => it.artist,
+            _ => it.title,
+        };
+        let label = format!("Radio · {artist}");
+        self.play_mix(Spec::RadioArtist(artist), label);
+    }
+}

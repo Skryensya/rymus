@@ -106,22 +106,47 @@ pub fn palette(px: &[u8]) -> Vec<[u8; 3]> {
     colors
 }
 
+// The size asked for the full player; lists and the player dock make do with what YouTube links to.
+const LARGE: &str = "=w1200-h1200";
+
+// The address of a bigger copy of a cover, for the hosts that take the size in the link ("...=w544-h544-l90-rj").
+pub fn large(url: &str) -> Option<String> {
+    if !url.contains("googleusercontent.com/") && !url.contains("ggpht.com/") {
+        return None;
+    }
+    let (base, size) = url.rsplit_once("=w")?;
+    let (w, rest) = size.split_once("-h")?;
+    let after = rest.trim_start_matches(|c: char| c.is_ascii_digit());
+    let number = |s: &str| !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit());
+    (number(w) && after.len() < rest.len()).then(|| format!("{base}{LARGE}{after}"))
+}
+pub fn is_large(url: &str) -> bool {
+    url.contains(LARGE)
+}
+
 pub fn load(url: &str) -> Option<Got> {
     let mut image = Vec::new();
     crate::yt::agent().get(url).call().ok()?.into_reader().take(10_000_000).read_to_end(&mut image).ok()?;
-    let png = ffmpeg(&image, &["-vf", "scale=400:-1", "-f", "image2pipe", "-vcodec", "png"])?;
+    let scale = if is_large(url) { "scale='min(1200,iw)':-1" } else { "scale=400:-1" };
+    let png = ffmpeg(&image, &["-vf", scale, "-f", "image2pipe", "-vcodec", "png"])?;
     let px = ffmpeg(&image, &["-vf", "scale=16:16:flags=area", "-f", "rawvideo", "-pix_fmt", "rgb24"])?;
     Some(Got { b64: base64::engine::general_purpose::STANDARD.encode(png), rgb: vivid(&px), palette: palette(&px), image })
 }
 
 pub const CLEAR: &str = "\x1b_Ga=d,d=A,q=2\x1b\\";
 
-// Draw at 1-indexed row/col, `cols` cells wide (height follows the image aspect). q=2: the terminal sends no replies.
-pub fn place(b64: &str, row: usize, col: usize, cols: usize) -> String {
-    let mut s = format!("\x1b[{row};{col}H");
+// Removes the image with this id (each spot on screen has its own, so changing one leaves the others).
+pub fn delete(id: u32) -> String {
+    format!("\x1b_Ga=d,d=I,i={id},q=2\x1b\\")
+}
+
+// Draw at 1-indexed row/col, `cols` cells wide (height follows the image aspect), as image `id`. q=2: the terminal
+// sends no replies.
+pub fn place(b64: &str, row: usize, col: usize, cols: usize, id: u32) -> String {
+    let mut s = format!("{}\x1b[{row};{col}H", delete(id));
     let chunks: Vec<&[u8]> = b64.as_bytes().chunks(4096).collect();
     for (i, chunk) in chunks.iter().enumerate() {
-        let head = if i == 0 { format!("a=T,f=100,c={cols},C=1,") } else { String::new() };
+        let head = if i == 0 { format!("a=T,f=100,i={id},c={cols},C=1,") } else { String::new() };
         let more = u8::from(i + 1 < chunks.len());
         s.push_str(&format!("\x1b_G{head}q=2,m={more};{}\x1b\\", String::from_utf8_lossy(chunk)));
     }
@@ -149,6 +174,15 @@ mod tests {
     use super::*;
 
     #[test]
+    fn bigger_covers() {
+        let big = large("https://yt3.googleusercontent.com/ab=w120-h120-l90-rj").unwrap();
+        assert_eq!(big, "https://yt3.googleusercontent.com/ab=w1200-h1200-l90-rj");
+        assert!(is_large(&big));
+        assert_eq!(large("https://i.ytimg.com/vi/x/sddefault.jpg"), None);
+        assert_eq!(large("https://lh3.googleusercontent.com/ab"), None);
+    }
+
+    #[test]
     fn dominant_color() {
         let mut px: Vec<u8> = [90, 150, 70].repeat(20);
         px.extend([250, 20, 20]);
@@ -160,3 +194,20 @@ mod tests {
         assert_eq!(palette(&gray), [[20, 20, 20], [220, 220, 220]]); // a gray cover: its shades
     }
 }
+
+#[cfg(test)]
+mod image_ids {
+    use super::*;
+
+    #[test]
+    fn each_image_replaces_only_itself() {
+        let one = place("AAAA", 3, 4, 10, 1);
+        assert!(one.starts_with(&delete(1)), "the old copy of image 1 goes first");
+        assert!(one.contains("a=T,f=100,i=1,c=10,"));
+        assert!(!one.contains("d=A") && !one.contains("i=2"), "image 2 is never touched");
+        assert_eq!(delete(2), "\x1b_Ga=d,d=I,i=2,q=2\x1b\\");
+        let long = place(&"A".repeat(10_000), 1, 1, 5, 2);
+        assert_eq!(long.matches("i=2,c=5").count(), 1, "the id is sent once, with the first chunk");
+    }
+}
+

@@ -48,9 +48,7 @@ pub fn song_key(t: &Item) -> String {
 
 // ---------- taste ----------
 fn local(at_ms: i64) -> (i32, i32) {
-    let secs = (at_ms / 1000) as libc::time_t;
-    let mut tm: libc::tm = unsafe { std::mem::zeroed() };
-    unsafe { libc::localtime_r(&secs, &mut tm) };
+    let tm = crate::platform::local_time(at_ms / 1000);
     (tm.tm_hour, tm.tm_wday)
 }
 fn part(h: i32) -> u8 {

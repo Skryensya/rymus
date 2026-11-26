@@ -18,15 +18,21 @@ pub struct Glyphs {
     pub like: &'static str,
     pub unliked: &'static str,
     pub dislike: &'static str,
+    pub play: &'static str,
+    pub pause: &'static str,
+    pub prev: &'static str,
+    pub next: &'static str,
+    pub repeat: &'static str,
+    pub repeat_one: &'static str,
 }
 // Powerline and Nerd Font glyphs (Ghostty ships them); plain symbols with YM_PLAIN=1.
 pub fn glyphs() -> &'static Glyphs {
     static G: OnceLock<Glyphs> = OnceLock::new();
     G.get_or_init(|| {
         if std::env::var_os("YM_PLAIN").is_some_and(|v| !v.is_empty()) {
-            Glyphs { sep: " ", like: "♥", unliked: "♡", dislike: "✗" }
+            Glyphs { sep: " ", like: "♥", unliked: "♡", dislike: "✗", play: "▶", pause: "‖", prev: "«", next: "»", repeat: "↻", repeat_one: "1" }
         } else {
-            Glyphs { sep: "\u{e0b0}", like: "\u{f004}", unliked: "\u{f08a}", dislike: "\u{f165}" }
+            Glyphs { sep: "\u{e0b0}", like: "\u{f004}", unliked: "\u{f08a}", dislike: "\u{f165}", play: "\u{f04b}", pause: "\u{f04c}", prev: "\u{f048}", next: "\u{f051}", repeat: "\u{f0456}", repeat_one: "\u{f0458}" }
         }
     })
 }
@@ -76,6 +82,9 @@ fn tail(s: &str, n: usize) -> &str {
     s
 }
 pub fn cut(s: &str, n: usize) -> String {
+    if n == 0 {
+        return String::new(); // not even room for the …
+    }
     if width(s) > n {
         format!("{}…", take(s, n.saturating_sub(1)))
     } else {
@@ -111,9 +120,13 @@ pub fn visible(s: &str) -> String {
 // Tab bar: [ymus][tab][tab]... as ribbons. Returns the line and the column span of each tab (for the mouse).
 pub fn tab_bar(w: usize, tabs: &[(String, &str)], active: usize, accent: Rgb) -> (String, Vec<(usize, usize, usize)>) {
     let sep = glyphs().sep;
-    let build = |short: bool| {
-        let mut items = vec![(" ♫ rymus ".to_string(), BAR, accent, true)];
-        for (i, (full, small)) in tabs.iter().enumerate() {
+    // brand: the " ♫ rymus " label first, left out when even the short tabs do not fit with it; on the narrowest
+    // screens only the tab you are on is shown
+    let build = |short: bool, brand: bool, all: bool| {
+        let mut items = if brand { vec![(" ♫ rymus ".to_string(), BAR, accent, true)] } else { vec![] };
+        let mut index = Vec::new(); // tab number of each item after the brand
+        for (i, (full, small)) in tabs.iter().enumerate().filter(|(i, _)| all || *i == active) {
+            index.push(i);
             let label = format!(" {} ", if short { small } else { full.as_str() });
             items.push(if i == active { (label, accent, BLACK, true) } else { (label, RIB, TXT, false) });
         }
@@ -128,8 +141,8 @@ pub fn tab_bar(w: usize, tabs: &[(String, &str)], active: usize, accent: Rgb) ->
                 None => s += &bgc(*bg),
             }
             s += &format!("{}{}{t}\x1b[22m", fgc(*color), if *strong { "\x1b[1m" } else { "" });
-            if i > 0 {
-                spans.push((i - 1, (col - 1).max(1), col + width(t) - 1));
+            if !brand || i > 0 {
+                spans.push((index[i - usize::from(brand)], (col - 1).max(1), col + width(t) - 1));
             }
             col += width(t);
             last = Some(*bg);
@@ -137,9 +150,11 @@ pub fn tab_bar(w: usize, tabs: &[(String, &str)], active: usize, accent: Rgb) ->
         s += &format!("{}{}{sep}", bgc(BAR), fgc(last.unwrap_or(BAR)));
         (s, col, spans)
     };
-    let mut b = build(false);
-    if b.1 > w {
-        b = build(true);
+    let mut b = build(false, true, true);
+    for (short, brand, all) in [(true, true, true), (true, false, true), (false, false, false), (true, false, false)] {
+        if b.1 > w {
+            b = build(short, brand, all);
+        }
     }
     (format!("{}{}{}{RESET}", b.0, bgc(BAR), spaces(w.saturating_sub(b.1))), b.2)
 }
@@ -197,10 +212,11 @@ pub fn spectrum(bands: &[f64], w: usize, h: usize, accent: Rgb) -> Vec<String> {
         .collect()
 }
 
-// Always-visible search field under the tab bar.
-pub fn search_bar(w: usize, typing: bool, text: &str, placeholder: &str, accent: Rgb) -> String {
-    let label = " / Search ";
-    let field_w = w.saturating_sub(label.len() + 1);
+// Always-visible search field under the tab bar: three rows in its own box, or one plain row on a short screen.
+pub fn search_bar(w: usize, title: &str, typing: bool, text: &str, placeholder: &str, accent: Rgb, boxed: bool) -> Vec<String> {
+    let label = format!(" {title} ");
+    // inside the box: a space on each side; on one line: the label and a space
+    let field_w = w.saturating_sub(if boxed { 4 } else { width(&label) + 1 });
     let field = if typing {
         let body = format!("{text}█");
         pad(tail(&body, field_w), field_w)
@@ -208,10 +224,28 @@ pub fn search_bar(w: usize, typing: bool, text: &str, placeholder: &str, accent:
         let shown = cut(if text.is_empty() { placeholder } else { text }, field_w);
         format!("\x1b[2m{shown}\x1b[22m{}", spaces(field_w.saturating_sub(width(&shown))))
     };
+    if boxed {
+        let color = if typing { accent } else { GRAY };
+        return frame(title, if typing { accent } else { TXT }, &[format!(" {field} ")], w, color);
+    }
     let lab = if typing {
         format!("{}{}\x1b[1m{label}\x1b[22m{RESET}", bgc(accent), fgc(BLACK))
     } else {
         format!("{}{}{label}{RESET}", bgc(RIB), fgc(TXT))
     };
-    format!("{lab} {field}")
+    vec![format!("{lab} {field}")]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn search_rows_are_exact() {
+        for (typing, boxed) in [(false, false), (true, false), (false, true), (true, true)] {
+            let rows = search_bar(60, "/ Search", typing, "canción larga ".repeat(9).as_str(), "…", GREEN, boxed);
+            assert_eq!(rows.len(), if boxed { 3 } else { 1 });
+            assert!(rows.iter().all(|r| width(&visible(r)) == 60), "typing {typing} boxed {boxed}");
+        }
+    }
 }

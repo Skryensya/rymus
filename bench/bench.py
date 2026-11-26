@@ -63,7 +63,7 @@ class App:
         # an app stopped while still starting leaves its player behind
         subprocess.run(["pkill", "-f", f"ymus-{self.pid}.sock"], check=False)
 
-    def ready(self, text=b"Top songs"):
+    def ready(self, text=b"Discover"):  # always on Home
         if not self.pump(PATIENCE, text):
             self.close()
             sys.exit(f"no screen after {PATIENCE} s")

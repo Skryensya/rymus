@@ -1,25 +1,47 @@
 // rymus (ymus in Rust): search YouTube Music and play it inside the terminal.
 // mpv runs headless and is driven over its JSON IPC socket. No account: everything is anonymous.
 // Likes, play history, search history, settings and the last session live in a local SQLite file (see db.rs).
-mod app;
-mod cover;
-mod db;
-mod item;
-mod lyrics;
-mod mixes;
-mod mpv;
-mod recommend;
-mod render;
-mod trip;
-mod ui;
-mod viz;
-mod yt;
+//
+// Where things are (each file starts by saying what it does):
+
+// The app: its state and everything it does, and how it is drawn
+mod app; //      state, keys, mouse, playback, lists; split by topic in app/
+mod render; //   the whole screen as one string; split by view in render/
+mod item; //     one row of any list (a song, an album, a header…)
+
+// Talking to the outside
+mod mpv; //      the player, driven over its IPC socket
+mod yt; //       YouTube Music without an account
+mod lyrics; //   lyrics from LRCLIB
+mod playlist; // importing a playlist from a pasted link
+mod cover; //    cover images: download, colours, kitty images and half blocks
+mod output; //   which device the sound goes to
+mod platform; // what differs between macOS and Linux
+
+// Your data and taste
+mod db; //       the local SQLite log: songs, plays, likes, playlists, settings
+mod config; //   the Config tab's settings
+mod eq; //       the equalizer: bands, profiles, the filter and its commands
+mod recommend; // the taste model and the ranking of new songs
+mod mixes; //    radios and Discover mixes, built from candidates
+
+// Look
+mod ui; //       frames, tab bar, search field, hints, text widths
+mod theme; //    the accent colour and how it changes
+mod home; //     how Home's sections share the height
+mod charts; //   the Stats charts
+mod bigtext; //  the big pixel letters of karaoke
+mod viz; //      the spectrum analyser (inside mpv's audio filter)
+mod trip; //     the old smoke, one of the trip's scenes
+mod scenes; //   the full screen visualizer (V): its scenes, what they hear, how they change
+
+#[cfg(test)]
+mod flows; //    behaviour tests: the app driven by keys and mouse, judged by the screen
 
 use app::{App, Msg};
 use crossterm::event::{self, Event};
 use crossterm::terminal;
 use std::io::{BufRead, BufReader, Read, Write};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -27,13 +49,13 @@ use std::time::{Duration, Instant};
 const TICK: Duration = Duration::from_millis(40);
 const FRAME_DELAY: Duration = Duration::from_millis(30); // several changes in a row make one frame
 
-static SIGNALLED: AtomicBool = AtomicBool::new(false);
-extern "C" fn on_signal(_: libc::c_int) {
-    SIGNALLED.store(true, Ordering::Relaxed);
-}
-
 // Alt screen, hidden cursor, autowrap off (a wide glyph then clips instead of wrapping), mouse press/drag + SGR.
 // Restored when dropped, also if something panics.
+// Shift+Space looks exactly like Space unless the terminal reports every key as an escape code (kitty keyboard protocol,
+// with the shifted character too). Terminals without it ignore this. Off while typing, so composed text arrives as text.
+const ALL_KEYS: &[u8] = b"\x1b[>13u";
+const NORMAL_KEYS: &[u8] = b"\x1b[<u";
+
 struct Screen;
 impl Screen {
     fn enter() -> std::io::Result<Screen> {
@@ -47,6 +69,7 @@ impl Screen {
 impl Drop for Screen {
     fn drop(&mut self) {
         let mut out = std::io::stdout();
+        let _ = out.write_all(NORMAL_KEYS);
         let _ = write!(out, "{}\x1b[?1000l\x1b[?1002l\x1b[?1006l\x1b[?7h\x1b[?25h\x1b[?1049l", cover::CLEAR);
         let _ = out.flush();
         let _ = terminal::disable_raw_mode();
@@ -69,20 +92,34 @@ fn changes(frame: &str, shown: &mut Vec<String>) -> String {
 }
 
 fn run() -> Result<(), String> {
-    // before mpv exists, so an early signal cannot leave it behind
-    for signal in [libc::SIGTERM, libc::SIGHUP, libc::SIGINT] {
-        unsafe { libc::signal(signal, on_signal as extern "C" fn(libc::c_int) as libc::sighandler_t) };
+    let mut args = std::env::args().skip(1);
+    if args.next().as_deref() == Some("--drain") {
+        platform::drain(&args.next().unwrap_or_default());
+        return Ok(());
     }
+    let program = platform::this_program();
+    // before mpv exists, so an early signal cannot leave it behind
+    platform::watch_for_quit();
     let path = db::default_path();
     let database = db::Db::open(&path).map_err(|e| format!("cannot open {}: {e}", path.display()))?;
     let volume = database.get_setting("volume").and_then(|v| v.parse().ok()).unwrap_or(100);
-    let (mut player, mut measurements) = mpv::Mpv::spawn(volume).map_err(|e| match e.kind() {
-        std::io::ErrorKind::NotFound => "mpv not found: brew install mpv yt-dlp".to_string(),
-        _ => e.to_string(),
-    })?;
+    // a player left playing by `Q` is taken over; the note is read once, so two runs never share one
+    let left = database.get_setting("detached").and_then(|s| app::Detached::read(&s));
+    database.set_setting("detached", "");
+    let found = left.and_then(|l| mpv::Mpv::attach(&l.sock, &l.viz).map(|player| (player, l)));
+    let ((mut player, mut measurements), left) = match found {
+        Some((player, left)) => (player, Some(left)),
+        None => {
+            let started = mpv::Mpv::spawn(volume).map_err(|e| match e.kind() {
+                std::io::ErrorKind::NotFound => platform::INSTALL_HINT.to_string(),
+                _ => e.to_string(),
+            })?;
+            (started, None)
+        }
+    };
     let (tx, rx) = mpsc::channel::<Msg>();
 
-    // fd 3: the visualizer's measurements
+    // the visualizer's measurements
     let feed = Arc::new(Mutex::new(viz::Feed::default()));
     let sink = feed.clone();
     std::thread::spawn(move || {
@@ -110,9 +147,14 @@ fn run() -> Result<(), String> {
     });
 
     let mut app = App::new(database, path, tx.clone(), player, feed, volume);
+    if let Some(left) = left {
+        app.reattach(left);
+    }
     app.start();
     let screen = Screen::enter().map_err(|e| e.to_string())?;
 
+    let outputs = tx.clone();
+    output::watch(move || outputs.send(Msg::OutputChanged).is_ok());
     let input = tx;
     std::thread::spawn(move || loop {
         let msg = match event::read() {
@@ -128,10 +170,11 @@ fn run() -> Result<(), String> {
         }
     });
 
+    let mut all_keys = false;
     let mut next_tick = Instant::now() + TICK;
     let mut draw_at = Some(Instant::now());
     let mut on_screen: Vec<String> = Vec::new();
-    while !app.quit && !SIGNALLED.load(Ordering::Relaxed) {
+    while !app.quit && !platform::asked_to_quit() {
         let wake = draw_at.map_or(next_tick, |d| d.min(next_tick));
         let mut dirty = false;
         match rx.recv_timeout(wake.saturating_duration_since(Instant::now())) {
@@ -147,6 +190,11 @@ fn run() -> Result<(), String> {
             }
             Err(RecvTimeoutError::Disconnected) => break,
             Err(RecvTimeoutError::Timeout) => {}
+        }
+        if all_keys == app.typing {
+            all_keys = !app.typing;
+            let mut out = std::io::stdout();
+            let _ = out.write_all(if all_keys { ALL_KEYS } else { NORMAL_KEYS }).and_then(|_| out.flush());
         }
         let now = Instant::now();
         if now >= next_tick {
@@ -170,8 +218,19 @@ fn run() -> Result<(), String> {
             }
         }
     }
+    let kept = app.detach && app.now().is_some();
+    let restart = app.restart;
     app.shutdown();
     drop(screen);
+    if restart {
+        use std::os::unix::process::CommandExt;
+        // replaces this process; the new one finds the player left playing. Only returns if it could not start.
+        let error = std::process::Command::new(program.ok_or("cannot find rymus to restart it")?).args(std::env::args_os().skip(1)).exec();
+        return Err(format!("could not restart: {error}{}", if kept { " · the music keeps playing, run rymus again" } else { "" }));
+    }
+    if kept {
+        println!("The music keeps playing. Run rymus to control it; q there stops it.");
+    }
     Ok(())
 }
 
