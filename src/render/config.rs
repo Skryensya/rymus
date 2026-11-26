@@ -1,5 +1,6 @@
 // The Config tab: each group under its heading, every setting with all its choices in view (the chosen one
 // marked), and below, what the setting under the cursor does, in full.
+use crate::i18n::tr;
 use super::*;
 use crate::config;
 use super::eq::plain;
@@ -13,6 +14,7 @@ impl App {
 
         // the list: a blank line before each heading but the first; `index` is the item each row stands for
         let (mut lines, mut index) = (Vec::new(), Vec::new());
+        let mut clicks: Vec<(usize, usize, usize, Action)> = vec![]; // (line, x0, x1, what): each choice is clickable
         for (i, it) in data.iter().enumerate() {
             if it.kind == Kind::Header {
                 if i > 0 {
@@ -30,13 +32,10 @@ impl App {
                     continue;
                 }
                 let label = cell(&it.title, lw);
-                let chips: String = config::choices(&it.id)
-                    .iter()
-                    .map(|c| if *c == it.author { fg(a, &bold(&format!("[{c}]"))) } else if on { format!(" {c} ") } else { dim(&format!(" {c} ")) })
-                    .collect::<Vec<_>>()
-                    .join(" ");
-                // too narrow for them all: only the chosen one, still changed with ← →
-                let chips = if 4 + lw + width(&plain(&chips)) > iw { fg(a, &bold(&format!("‹ {} ›", it.author))) } else { chips };
+                let (chips, spans) = chips(&it.id, &it.author, on, iw.saturating_sub(lw + 6), a);
+                for (x0, x1, v) in spans {
+                    clicks.push((lines.len(), 5 + lw + x0, 5 + lw + x1, Action::Choose(it.id.clone(), v)));
+                }
                 lines.push(if on { format!("{} {}{chips}", fg(a, "▌"), fg(a, &bold(&label))) } else { format!("  {label}{chips}") });
             }
             index.push(i);
@@ -51,13 +50,16 @@ impl App {
             if !side {
                 about.push(dim(&"─".repeat(pw)));
             }
-            let head = if it.kind == Kind::Button { it.title.trim_end_matches('…').to_string() } else { format!("{} · {}", it.title, it.author) };
+            let head = if it.kind == Kind::Button { it.title.trim_end_matches('…').to_string() } else { format!("{} · {}", it.title, crate::i18n::t(&it.author)) };
             about.push(fg(if it.id == "wipe" { RED } else { a }, &bold(&head)));
             let hint = it.detail.clone().unwrap_or_default();
-            let mut text = crate::lyrics::wrap(&format!("{}{}", hint[..1].to_uppercase(), &hint[1..]), pw);
+            let mut chars = hint.chars();
+            let hint: String = chars.next().map(|c| c.to_uppercase().chain(chars).collect()).unwrap_or_default(); // capitalised
+            let mut text = crate::lyrics::wrap(&hint, pw);
             text.truncate(if side { 4 } else { 2 });
             about.extend(text);
-            let room = if side { l } else { l.saturating_sub(lines.len()) };
+            // the list scrolls, so the explanation may take what is left after a dozen rows of it
+            let room = if side { l } else { l.saturating_sub(lines.len().min(12)) };
             if it.id == "fade" && room >= about.len() + 4 + usize::from(!side) {
                 about.push(String::new());
                 about.extend(crossfade_picture(config::fade_secs(&it.author), pw, a));
@@ -70,6 +72,9 @@ impl App {
         let top = at.saturating_sub(n / 2).min(lines.len().saturating_sub(n));
         let mut rows: Vec<String> = lines.iter().skip(top).take(n).map(|r| format!(" {r}")).collect();
         let mut map: Vec<usize> = index.iter().skip(top).take(n).copied().collect();
+        for (line, x0, x1, what) in clicks.into_iter().filter(|c| c.0 >= top && c.0 < top + n) {
+            g.links.push((what, x0, x1, g.top + line - top));
+        }
         if side {
             rows.resize(l, String::new());
             for (i, line) in about.into_iter().enumerate() {
@@ -83,7 +88,7 @@ impl App {
         let rows: Vec<String> = rows.into_iter().take(l).map(|r| pad_to(&r, iw)).collect();
         self.settings = data;
         g.panes.push(Pane { rows: Some(map), ..pane(PaneId::List, 1, if side { list_w + 1 } else { w }, 0, 0) }); // the explanation is not a row
-        let (t, c) = v.title("Config · ↑ ↓ choose · ← → change");
+        let (t, c) = v.title(tr!("Config · ↑ ↓ choose · ← → change"));
         frame(&t, c, &rows, w, a)
     }
 }
@@ -95,9 +100,9 @@ fn crossfade_picture(secs: f64, w: usize, a: Rgb) -> Vec<String> {
     if secs <= 0.0 {
         let half = w / 2;
         return vec![
-            format!("{} {}", dim("this song"), fg(a, &"█".repeat(half.saturating_sub(10)))),
-            format!("{} {}{}", dim("next song"), spaces(half.saturating_sub(10)), "█".repeat(half.saturating_sub(10))),
-            dim("one ends, the next starts: no overlap"),
+            format!("{} {}", dim(tr!("this song")), fg(a, &"█".repeat(half.saturating_sub(10)))),
+            format!("{} {}{}", dim(tr!("next song")), spaces(half.saturating_sub(10)), "█".repeat(half.saturating_sub(10))),
+            dim(tr!("one ends, the next starts: no overlap")),
         ];
     }
     let fade = ((secs / 12.0) * 16.0).round().max(2.0) as usize; // columns the overlap takes, up to 16
@@ -106,13 +111,66 @@ fn crossfade_picture(secs: f64, w: usize, a: Rgb) -> Vec<String> {
     let up: String = (0..fade).map(|i| RAMP[RAMP.len() - 1 - i * RAMP.len() / fade]).collect();
     let pad = solid;
     vec![
-        format!("{} {}{}", dim("this song"), fg(a, &"█".repeat(solid)), fg(a, &down)),
-        format!("{} {}{up}{}", dim("next song"), spaces(pad), "█".repeat(solid)),
-        format!("{}{}", spaces(10 + pad), dim(&format!("╰{}╯ {} s together", "─".repeat(fade.saturating_sub(2)), secs))),
+        format!("{} {}{}", dim(tr!("this song")), fg(a, &"█".repeat(solid)), fg(a, &down)),
+        format!("{} {}{up}{}", dim(tr!("next song")), spaces(pad), "█".repeat(solid)),
+        format!("{}{}", spaces(10 + pad), dim(&tr!("╰{a}╯ {b} s together", a = "─".repeat(fade.saturating_sub(2)), b = secs))),
     ]
 }
 
 fn pad_to(s: &str, w: usize) -> String {
     let n = width(&plain(s));
     if n > w { cut(&plain(s), w) } else { format!("{s}{}", spaces(w - n)) }
+}
+
+// A setting's choices on one line of at most `room` columns, the chosen one marked: colors with a dot of their color,
+// borders with a corner of theirs. When they do not all fit, the ones around the chosen one, with ‹ › for the rest.
+// Returns the line and where each choice landed (x0, x1 from the line's start, its value).
+fn chips(key: &str, chosen: &str, on: bool, room: usize, a: Rgb) -> (String, Vec<(usize, usize, &'static str)>) {
+    let all = config::choices(key);
+    let at = all.iter().position(|c| *c == chosen).unwrap_or(0);
+    let shown: Vec<(String, String)> = all
+        .iter()
+        .enumerate()
+        .map(|(i, c)| {
+            let name = if key == "language" { capital(c) } else { crate::i18n::t(c).to_string() };
+            let mark = match key {
+                "accent" => config::accent(c).map_or_else(|| "◐ ".to_string(), |rgb| format!("{} ", fg(readable(rgb), "●"))),
+                "border" => crate::ui::BORDERS.get(i).map_or(String::new(), |b| format!("{}{} ", b.corners[0], b.top.chars().next().unwrap_or(' '))),
+                _ => String::new(),
+            };
+            let plain_text = format!("{}{name}", plain(&mark));
+            let text = if i == at { fg(a, &bold(&format!("[{mark}{name}]"))) } else if on { format!(" {mark}{name} ") } else { dim(&format!(" {} ", plain_text)) };
+            (text, plain_text)
+        })
+        .collect();
+    let w = |i: usize| width(&shown[i].1) + 3; // the brackets or spaces, and the gap after
+    // grow around the chosen one while it fits, two columns kept for ‹ ›
+    let (mut lo, mut hi, mut used) = (at, at + 1, w(at));
+    loop {
+        let grew = hi < shown.len() && used + w(hi) + 4 <= room && { used += w(hi); hi += 1; true };
+        let grew_left = lo > 0 && used + w(lo - 1) + 4 <= room && { lo -= 1; used += w(lo); true };
+        if !grew && !grew_left {
+            break;
+        }
+    }
+    let (mut line, mut x, mut spans) = (String::new(), 0, vec![]);
+    if lo > 0 {
+        line += &dim("‹ ");
+        x += 2;
+    }
+    for (i, (text, plain_text)) in shown.iter().enumerate().take(hi).skip(lo) {
+        spans.push((x, x + width(plain_text) + 1, all[i]));
+        line += text;
+        line += " ";
+        x += width(plain_text) + 3;
+    }
+    if hi < shown.len() {
+        line += &dim("›");
+    }
+    (line, spans)
+}
+
+fn capital(s: &str) -> String {
+    let mut chars = s.chars();
+    chars.next().map_or(String::new(), |c| c.to_uppercase().chain(chars).collect())
 }

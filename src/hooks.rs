@@ -2,7 +2,9 @@
 // named after the event, gets the song as one JSON object on its standard input. rymus knows nothing about what it
 // does. Titles come from outside, so they only ever travel in that JSON, never in a command line.
 //
-// Events: liked, unliked, disliked, playlist-add, playlist-remove, playing, played, skipped.
+// Events: liked, unliked, disliked, playlist-add, playlist-remove, playing, played, skipped, download-started,
+// downloaded, download-failed, download-deleted.
+use crate::i18n::tr;
 use crate::item::Item;
 use crate::platform;
 use serde_json::{json, Value};
@@ -11,8 +13,15 @@ use std::path::Path;
 use std::process::{Command, Stdio};
 
 fn payload(event: &str, t: &Item, mut extra: Value) -> Value {
-    let mut out = json!({"event": event, "id": t.id, "url": format!("https://music.youtube.com/watch?v={}", t.id),
-        "title": t.title, "artist": t.artist, "album": t.album, "cover": t.cover});
+    // a file of your own has no page on YouTube: its path instead
+    let (url, path) = match t.id.strip_prefix(crate::disk::OWN) {
+        Some(path) => (Value::Null, json!(path)),
+        None => (json!(format!("https://music.youtube.com/watch?v={}", t.id)), Value::Null),
+    };
+    let mut out = json!({"event": event, "id": t.id, "url": url, "title": t.title, "artist": t.artist, "album": t.album, "cover": t.cover});
+    if !path.is_null() {
+        out["path"] = path;
+    }
     if let (Some(out), Some(extra)) = (out.as_object_mut(), extra.as_object_mut()) {
         out.append(extra);
     }
@@ -37,13 +46,13 @@ pub fn run(data: &Path, event: &'static str, t: &Item, extra: Value, failed: imp
     std::thread::spawn(move || {
         let mut child = match command.spawn() {
             Ok(child) => child,
-            Err(e) => return failed(format!("Hook {event} could not start ({e}): is it executable?")),
+            Err(e) => return failed(tr!("Hook {event} could not start ({e}): is it executable?", event = event, e = e)),
         };
         if let Some(mut stdin) = child.stdin.take() {
             let _ = stdin.write_all(input.as_bytes()); // a hook may well not read it
         }
         if !child.wait().is_ok_and(|status| status.success()) {
-            failed(format!("Hook {event} failed, see {}", log.display()));
+            failed(tr!("Hook {event} failed, see {a}", event = event, a = log.display()));
         }
     });
 }

@@ -12,7 +12,7 @@ pub fn now_ms() -> i64 {
 }
 
 // The tables that are your data, in the order they are exported and read back (songs before what points at them).
-const EXPORTED: [&str; 8] = ["tracks", "likes", "dislikes", "plays", "playlists", "playlist_tracks", "searches", "settings"];
+const EXPORTED: [&str; 10] = ["tracks", "likes", "dislikes", "plays", "playlists", "playlist_tracks", "searches", "settings", "saved_albums", "follows"];
 // Lyrics kept on disk, all together: about 3 000 songs. Past it the ones used longest ago are dropped.
 pub const LYRICS_CAP: i64 = 10 * 1024 * 1024;
 
@@ -179,7 +179,10 @@ impl Db {
              CREATE TABLE IF NOT EXISTS searches(q TEXT PRIMARY KEY, at INTEGER NOT NULL);
              CREATE TABLE IF NOT EXISTS settings(k TEXT PRIMARY KEY, v TEXT);
              CREATE TABLE IF NOT EXISTS cache(k TEXT PRIMARY KEY, v TEXT, at INTEGER NOT NULL);
-             CREATE TABLE IF NOT EXISTS lyrics(id TEXT PRIMARY KEY, v TEXT NOT NULL, at INTEGER NOT NULL);",
+             CREATE TABLE IF NOT EXISTS lyrics(id TEXT PRIMARY KEY, v TEXT NOT NULL, at INTEGER NOT NULL);
+             CREATE TABLE IF NOT EXISTS saved_albums(id TEXT PRIMARY KEY, title TEXT, artist TEXT, year TEXT, cover TEXT, at INTEGER NOT NULL);
+             CREATE TABLE IF NOT EXISTS follows(id TEXT PRIMARY KEY, name TEXT, cover TEXT, known TEXT, fresh TEXT, at INTEGER NOT NULL);
+             CREATE TABLE IF NOT EXISTS downloads(id TEXT PRIMARY KEY, path TEXT NOT NULL, at INTEGER NOT NULL);",
         )?;
         // columns added later; older rows keep NULL / 0
         let columns: HashSet<String> = c.prepare("PRAGMA table_info(plays)")?.query_map([], |r| r.get(1))?.collect::<Result<_, _>>()?;
@@ -398,6 +401,13 @@ impl Db {
     }
 
     // The last songs played, each once, newest first.
+    // Every listen, newest first, with when it started.
+    pub fn history(&self, limit: i64) -> Vec<(Item, i64)> {
+        self.c
+            .prepare("SELECT t.*, p.at FROM plays p JOIN tracks t ON t.id = p.track_id WHERE p.seconds > 0 ORDER BY p.at DESC, p.id DESC LIMIT ?")
+            .and_then(|mut s| s.query_map([limit], |r| Ok((track(r)?, r.get("at")?)))?.collect())
+            .unwrap_or_default()
+    }
     pub fn recent(&self, limit: i64) -> Vec<Item> {
         self.rows(
             "SELECT t.* FROM tracks t JOIN (SELECT track_id, MAX(at) AS last_at, MAX(id) AS last FROM plays GROUP BY track_id) p
@@ -470,6 +480,70 @@ impl Db {
     }
     pub fn rename_playlist(&self, playlist: i64, name: &str) {
         self.exec("UPDATE playlists SET name=? WHERE id=?", params![name, playlist]);
+    }
+    // Albums you saved (by liking them), newest first.
+    pub fn save_album(&self, a: &Item) {
+        self.exec("INSERT OR IGNORE INTO saved_albums VALUES(?,?,?,?,?,?)", params![a.id, a.title, a.author, a.year, a.cover, now_ms()]);
+    }
+    pub fn drop_album(&self, id: &str) {
+        self.exec("DELETE FROM saved_albums WHERE id=?", [id]);
+    }
+    pub fn saved_albums(&self) -> Vec<Item> {
+        self.rows("SELECT * FROM saved_albums ORDER BY at DESC, rowid DESC", [], |r| {
+            let text = |n| r.get::<_, Option<String>>(n).map(Option::unwrap_or_default);
+            Ok(Item { kind: crate::item::Kind::Album, id: r.get("id")?, title: text("title")?, author: text("artist")?, year: text("year")?, cover: text("cover")?, ..Default::default() })
+        })
+    }
+    // Followed artists. `known` are the ids of the albums seen so far; `fresh` the new ones not opened yet.
+    pub fn follow(&self, id: &str, name: &str, cover: &str, known: &Value) {
+        self.exec("INSERT OR REPLACE INTO follows VALUES(?,?,?,?,'[]',?)", params![id, name, cover, known.to_string(), now_ms()]);
+    }
+    pub fn unfollow(&self, id: &str) {
+        self.exec("DELETE FROM follows WHERE id=?", [id]);
+    }
+    pub fn follows(&self) -> Vec<(Item, Value, Value)> {
+        let read = |r: &Row| {
+            let text = |n| r.get::<_, Option<String>>(n).map(Option::unwrap_or_default);
+            let json = |n| text(n).map(|t| serde_json::from_str::<Value>(&t).unwrap_or(Value::Null));
+            let artist = Item { kind: crate::item::Kind::Artist, id: r.get("id")?, title: text("name")?, cover: text("cover")?, author: "Artist".into(), ..Default::default() };
+            Ok((artist, json("known")?, json("fresh")?))
+        };
+        self.c.prepare("SELECT * FROM follows ORDER BY name COLLATE NOCASE").and_then(|mut s| s.query_map([], read)?.collect()).unwrap_or_default()
+    }
+    pub fn set_releases(&self, id: &str, known: &Value, fresh: &Value) {
+        self.exec("UPDATE follows SET known=?, fresh=? WHERE id=?", params![known.to_string(), fresh.to_string(), id]);
+    }
+
+    // Songs kept as files.
+    pub fn add_download(&self, t: &Item, file: &std::path::Path) {
+        self.save_track(t);
+        self.exec("INSERT OR REPLACE INTO downloads VALUES(?,?,?)", params![t.id, file.to_string_lossy(), now_ms()]);
+    }
+    pub fn downloads(&self) -> Vec<(String, std::path::PathBuf)> {
+        self.c
+            .prepare("SELECT id, path FROM downloads")
+            .and_then(|mut s| s.query_map([], |r| Ok((r.get(0)?, std::path::PathBuf::from(r.get::<_, String>(1)?))))?.collect())
+            .unwrap_or_default()
+    }
+    pub fn drop_download(&self, id: &str) {
+        self.exec("DELETE FROM downloads WHERE id=?", [id]);
+    }
+    pub fn downloaded_tracks(&self) -> Vec<Item> {
+        self.rows("SELECT t.* FROM downloads d JOIN tracks t ON t.id=d.id ORDER BY d.at DESC", [], track)
+    }
+    // Each download with how many times it was heard, the least heard (then the oldest) first.
+    pub fn download_plays(&self) -> Vec<(String, std::path::PathBuf, i64)> {
+        self.c
+            .prepare(
+                "SELECT d.id, d.path, (SELECT COUNT(*) FROM plays p WHERE p.track_id=d.id AND p.seconds > 0) AS n
+                 FROM downloads d ORDER BY n, d.at",
+            )
+            .and_then(|mut s| s.query_map([], |r| Ok((r.get(0)?, std::path::PathBuf::from(r.get::<_, String>(1)?), r.get(2)?)))?.collect())
+            .unwrap_or_default()
+    }
+
+    pub fn playlist_source(&self, playlist: i64) -> Option<String> {
+        self.c.query_row("SELECT source FROM playlists WHERE id=?", [playlist], |r| r.get(0)).ok().flatten()
     }
     pub fn delete_playlist(&self, playlist: i64) {
         self.exec("DELETE FROM playlist_tracks WHERE playlist_id=?", [playlist]);

@@ -119,62 +119,91 @@ fn song(x: &Value) -> Item {
         ..Default::default()
     }
 }
+#[cfg(test)]
 pub fn parse_songs(v: &Value) -> Vec<Item> {
     list_items(v).into_iter().map(song).filter(|t| !t.id.is_empty()).collect()
 }
 
-// "1.4M plays" -> 1_400_000; 0 when there is no count.
-fn count(s: &str) -> u64 {
-    let n = s.split(' ').next().unwrap_or("").replace(',', "");
-    let (num, mul) = match n.chars().last() {
-        Some('K') => (&n[..n.len() - 1], 1e3),
-        Some('M') => (&n[..n.len() - 1], 1e6),
-        Some('B') => (&n[..n.len() - 1], 1e9),
-        _ => (n.as_str(), 1.0),
-    };
-    (num.parse::<f64>().unwrap_or(0.0) * mul) as u64
+// The words of a name, lower case and without accents: "Beyoncé - Halo" -> ["beyonce", "halo"].
+pub(crate) fn words(s: &str) -> Vec<String> {
+    let folded: String = s
+        .to_lowercase()
+        .chars()
+        .map(|c| match c {
+            'á' | 'à' | 'â' | 'ä' | 'ã' => 'a',
+            'é' | 'è' | 'ê' | 'ë' => 'e',
+            'í' | 'ì' | 'î' | 'ï' => 'i',
+            'ó' | 'ò' | 'ô' | 'ö' | 'õ' => 'o',
+            'ú' | 'ù' | 'û' | 'ü' => 'u',
+            'ñ' => 'n',
+            'ç' => 'c',
+            c => c,
+        })
+        .filter(|&c| !matches!(c, '\'' | '’'))
+        .collect();
+    folded.split(|c: char| !c.is_alphanumeric()).filter(|w| !w.is_empty()).map(String::from).collect()
 }
+// Versions you did not ask for go after the song itself.
+const VARIANTS: [&str; 7] = ["remix", "live", "cover", "karaoke", "instrumental", "sped", "slowed"];
 
-// How well a result answers the query: 0 = every word is in who made it, 1 = every word is in its title and maker
-// together, 2 = neither. YouTube's own order mixes in remixes, covers and features, so results are sorted by this.
-pub fn tier(query: &str, title: &str, by: &str) -> u8 {
-    let q = query.to_lowercase();
-    let has = |s: &str| {
-        let s = s.to_lowercase();
-        q.split_whitespace().all(|w| s.contains(w))
-    };
-    if has(by) {
+// How faithful a title by someone is to what was typed, lower first: (words of the query found nowhere, how close the
+// title is to what is left of the query once the artist's name is taken out, an unasked version). Popularity does not
+// count: between equals, YouTube's own order stays.
+fn relevance(query: &str, title: &str, by: &str) -> (usize, u8, u8) {
+    let (q, full, who) = (words(query), words(title), words(by));
+    // "Song (feat. X) - Remastered" -> "Song"
+    let bare = title.split(['(', '[']).next().unwrap_or(title);
+    let base = words(bare.split(" - ").next().unwrap_or(bare));
+    let within = |set: &[String], w: &String| set.iter().any(|x| x.starts_with(w.as_str()));
+    let missing = q.iter().filter(|w| !within(&full, w) && !within(&who, w)).count();
+    let rest: Vec<String> = q.iter().filter(|w| !within(&who, w)).cloned().collect();
+    let closeness = if rest.is_empty() || base == q || base == rest {
         0
-    } else if has(&format!("{title} {by}")) {
+    } else if base.join(" ").starts_with(&rest.join(" ")) {
         1
     } else {
         2
-    }
+    };
+    let variant = full.iter().any(|w| VARIANTS.contains(&w.as_str()) && !q.contains(w));
+    (missing, closeness, u8::from(variant))
 }
 
-// Most listened first, an artist named exactly that counting ten times: YouTube may put a more famous related one
-// above them, and a tribute act named after a song should not beat the band.
+// The artist named as typed, then names that start with it, then names that hold its words ("the" aside).
 pub fn ranked_artists(v: &Value, query: &str) -> Vec<Item> {
-    let q = query.trim().to_lowercase();
-    let mut rows: Vec<(Item, u64)> = list_items(v)
-        .into_iter()
-        .map(|x| {
-            let a = parse_artist_row(x);
-            let audience = count(text(column(x, 1)).rsplit("• ").next().unwrap_or("")); // "Artist • 65M monthly audience"
-            let score = if a.title.to_lowercase() == q { audience.saturating_mul(10) } else { audience };
-            (a, score)
-        })
-        .filter(|(a, _)| !a.id.is_empty())
-        .collect();
-    rows.sort_by_key(|(_, score)| std::cmp::Reverse(*score));
-    rows.into_iter().map(|(a, _)| a).collect()
+    let name = |s: &str| {
+        let mut w = words(s);
+        if w.len() > 1 && w[0] == "the" {
+            w.remove(0);
+        }
+        w
+    };
+    let q = name(query);
+    let mut rows: Vec<Item> = list_items(v).into_iter().map(parse_artist_row).filter(|a| !a.id.is_empty()).collect();
+    rows.sort_by_cached_key(|a| {
+        let n = name(&a.title);
+        if n == q {
+            0
+        } else if n.join(" ").starts_with(&q.join(" ")) {
+            1
+        } else if q.iter().all(|w| n.iter().any(|x| x.starts_with(w.as_str()))) {
+            2
+        } else {
+            3
+        }
+    });
+    rows
 }
 
-// Songs that answer the query first, then the most played.
 pub fn ranked_songs(v: &Value, query: &str) -> Vec<Item> {
-    let mut rows: Vec<(Item, u64)> = list_items(v).into_iter().map(|x| (song(x), count(&text(column(x, 2))))).filter(|(t, _)| !t.id.is_empty()).collect();
-    rows.sort_by_key(|(t, plays)| (tier(query, &t.title, &t.artist), std::cmp::Reverse(*plays)));
-    rows.into_iter().map(|(t, _)| t).collect()
+    let mut rows: Vec<Item> = list_items(v).into_iter().map(song).filter(|t| !t.id.is_empty()).collect();
+    rows.sort_by_cached_key(|t| relevance(query, &t.title, &t.artist));
+    rows
+}
+
+pub fn ranked_albums(v: &Value, query: &str) -> Vec<Item> {
+    let mut rows = parse_albums(v);
+    rows.sort_by_cached_key(|a| relevance(query, &a.title, &a.author));
+    rows
 }
 
 pub fn parse_albums(v: &Value) -> Vec<Item> {
@@ -382,11 +411,21 @@ impl Yt {
     fn search(&self, query: &str, params: &str) -> Result<Value, String> {
         self.call("search", json!({"query": query, "params": params}))
     }
+    // A page of search results, 20 or so, of songs (0), albums (1) or artists (2), and the token of the next page.
+    pub fn page(&self, kind: usize, query: &str, token: Option<&str>) -> Result<(Vec<Item>, Option<String>), String> {
+        let page = match token {
+            Some(token) => self.call("search", json!({"continuation": token}))?,
+            None => self.search(query, [SONGS, ALBUMS, ARTISTS][kind])?,
+        };
+        let rows = [ranked_songs, ranked_albums, ranked_artists][kind](&page, query);
+        let next = first(&page, "nextContinuationData").and_then(|n| n["continuation"].as_str()).map(String::from);
+        Ok((rows, next))
+    }
     pub fn songs(&self, query: &str) -> Result<Vec<Item>, String> {
         Ok(ranked_songs(&self.search(query, SONGS)?, query))
     }
     pub fn albums(&self, query: &str) -> Result<Vec<Item>, String> {
-        Ok(parse_albums(&self.search(query, ALBUMS)?))
+        Ok(ranked_albums(&self.search(query, ALBUMS)?, query))
     }
     pub fn artists(&self, query: &str) -> Result<Vec<Item>, String> {
         Ok(ranked_artists(&self.search(query, ARTISTS)?, query))
@@ -453,18 +492,26 @@ mod fake {
             "search" if body["params"] == ARTISTS && body["query"] == "Band" => json!({"rows": [{"musicResponsiveListItemRenderer": {
                 "navigationEndpoint": {"browseEndpoint": {"browseId": "UCband"}},
                 "flexColumns": [{"musicResponsiveListItemFlexColumnRenderer": {"text": {"runs": [{"text": "Band"}]}}}]}}]}),
+            // what a followed artist has put out since: one album more
+            "browse" if body["browseId"] == "UCnews" => json!({"musicCarouselShelfRenderer": {"header": {"title": {"runs": [{"text": "Albums"}]}},
+                "contents": [{"musicTwoRowItemRenderer": {"navigationEndpoint": {"browseEndpoint": {"browseId": "MPREnew"}}, "title": {"runs": [{"text": "Fresh Record"}]},
+                    "subtitle": {"runs": [{"text": "2026"}]}}}]}}),
             "browse" if body["browseId"] == "UCband" => json!({"musicShelfRenderer": {"title": {"runs": [{"text": "Top songs",
                 "navigationEndpoint": {"browseEndpoint": {"browseId": "VLall"}}}]}, "contents": [row("t1", "Hit", "Band")]}}),
             "browse" if body["browseId"] == "VLall" => json!({"musicPlaylistShelfRenderer": {"contents": [row("t1", "Hit", "Band"),
                 row("t2", "Hit (Live)", "Band"), row("t3", "Deep Cut", "Band"), row("g", "Guest Spot", "Someone Else"), row("t4", "Closer", "Band")]}}),
             // an album: "Long Road" by Band, 2019, three songs
-            "search" if body["params"] == ALBUMS && body["query"] == "record" => json!({"rows": [{"musicResponsiveListItemRenderer": {
+            "search" if body["params"] == ALBUMS && (body["query"] == "record" || body["query"] == "Long Road Band") => json!({"rows": [{"musicResponsiveListItemRenderer": {
                 "navigationEndpoint": {"browseEndpoint": {"browseId": "MPREroad"}},
                 "thumbnail": {"thumbnails": [{"url": "test://road", "width": 120}]},
                 "flexColumns": [{"musicResponsiveListItemFlexColumnRenderer": {"text": {"runs": [{"text": "Long Road"}]}}},
                     {"musicResponsiveListItemFlexColumnRenderer": {"text": {"runs": [{"text": "Album"}, {"text": " • "}, {"text": "Band"}, {"text": " • "}, {"text": "2019"}]}}}]}}]}),
             "browse" if body["browseId"] == "MPREroad" => json!({"musicShelfRenderer": {"contents": [row("a1", "Opening", ""), row("a2", "Middle", ""), row("a3", "Ending", "")]}}),
             "search" if body["params"] == ALBUMS || body["params"] == ARTISTS => json!({}),
+            // a second page, reached by its token
+            "search" if body["continuation"] == "more" => json!({"rows": [row("m1", "Later One", "Band"), row("m2", "Later Two", "Band")]}),
+            "search" if body["query"] == "many" && body["params"] == super::SONGS => json!({"rows": (1..=8).map(|i| row(&format!("k{i}"), &format!("Many {i}"), "Band")).collect::<Vec<_>>(),
+                "continuations": [{"nextContinuationData": {"continuation": "more"}}]}),
             "search" => json!({"rows": [row("s1", "Result One", "Band"), row("s2", "Result Two", "Band"), row("s3", "Result Three", "Band")]}),
             "next" => {
                 let seed = body["videoId"].as_str().unwrap_or("");
@@ -501,26 +548,26 @@ mod tests {
 
     #[test]
     fn ranking() {
-        assert_eq!((count("1.4M plays"), count("402M plays"), count("2.1B plays"), count("950 plays"), count("")), (1_400_000, 402_000_000, 2_100_000_000, 950, 0));
-        let row = |id: &str, title: &str, by: &str, plays: &str| {
+        let row = |id: &str, title: &str, by: &str| {
             let col = |t: &str| json!({"musicResponsiveListItemFlexColumnRenderer": {"text": {"runs": [{"text": t}]}}});
-            json!({"musicResponsiveListItemRenderer": {"playlistItemData": {"videoId": id}, "flexColumns": [col(title), col(by), col(plays)]}})
+            json!({"musicResponsiveListItemRenderer": {"playlistItemData": {"videoId": id}, "flexColumns": [col(title), col(by)]}})
         };
-        let page = json!({"rows": [row("remix", "Chord Memory (Daft Punk Remix)", "Ian Pooley", "1.4M plays"), row("score", "The Son of Flynn", "Daft Punk", "22M plays"),
-            row("feat", "Starboy (feat. Daft Punk)", "The Weeknd", "2B plays"), row("hit", "Harder, Better, Faster, Stronger", "Daft Punk", "402M plays"), row("other", "Blinding Lights", "The Weeknd", "4B plays")]});
-        let ids: Vec<String> = ranked_songs(&page, "Daft Punk").into_iter().map(|t| t.id).collect();
-        assert_eq!(ids, ["hit", "score", "feat", "remix", "other"]);
-        let artist = |id: &str, name: &str, audience: &str| {
+        let ids = |rows: Vec<Value>, q: &str| ranked_songs(&json!({"rows": rows}), q).into_iter().map(|t| t.id).collect::<Vec<_>>();
+        // by the artist, in YouTube's order; then the ones that only mention them; then what does not answer
+        let page = vec![row("remix", "Chord Memory (Daft Punk Remix)", "Ian Pooley"), row("score", "The Son of Flynn", "Daft Punk"),
+            row("feat", "Starboy (feat. Daft Punk)", "The Weeknd"), row("hit", "Harder, Better, Faster, Stronger", "Daft Punk"), row("other", "Blinding Lights", "The Weeknd")];
+        assert_eq!(ids(page, "Daft Punk"), ["score", "hit", "feat", "remix", "other"]);
+        // the title as typed beats a longer one and a version, whatever YouTube put first
+        let page = vec![row("live", "Halo (Live)", "Beyoncé"), row("longer", "Halo of Light", "Beyoncé"), row("other", "Halo", "Someone"), row("it", "Halo", "Beyoncé")];
+        assert_eq!(ids(page.clone(), "halo beyonce"), ["it", "live", "longer", "other"]);
+        assert_eq!(ids(page, "halo live")[0], "live", "a version you ask for comes first");
+        let artist = |id: &str, name: &str| {
             let col = |t: &str| json!({"musicResponsiveListItemFlexColumnRenderer": {"text": {"runs": [{"text": t}]}}});
-            json!({"musicResponsiveListItemRenderer": {"navigationEndpoint": {"browseEndpoint": {"browseId": id}}, "flexColumns": [col(name), col(audience)]}})
+            json!({"musicResponsiveListItemRenderer": {"navigationEndpoint": {"browseEndpoint": {"browseId": id}}, "flexColumns": [col(name)]}})
         };
-        let page = |q: &str| {
-            let v = json!({"rows": [artist("weeknd", "The Weeknd", "Artist • 248M monthly audience"), artist("daft", "Daft Punk", "Artist • 65M monthly audience"),
-                artist("tribute", "Bohemian Rhapsody", "Artist • 3 subscribers"), artist("queen", "Queen", "Artist • 50M monthly audience")]});
-            ranked_artists(&v, q).into_iter().map(|a| a.id).collect::<Vec<_>>()
-        };
-        assert_eq!(page("daft punk")[0], "daft");
-        assert_eq!(page("Bohemian Rhapsody")[3], "tribute");
+        let v = json!({"rows": [artist("big", "Queens of the Stone Age"), artist("weeknd", "The Weeknd"), artist("queen", "Queen")]});
+        let first = |q: &str| ranked_artists(&v, q)[0].id.clone();
+        assert_eq!((first("queen"), first("weeknd")), ("queen".to_string(), "weeknd".to_string()));
     }
 
     #[test]

@@ -1,6 +1,10 @@
 // Lyrics (LRCLIB) and cover images, fetched in the background. Covers are kept for the session, lyrics on disk too
 // (db::lyrics_*), so a song you play again has them at once.
+use crate::i18n::tr;
 use super::*;
+
+// Covers (and their half-block drawings) kept in memory: about 50 KB each.
+const COVERS_KEPT: usize = 200;
 
 impl App {
     // Where playback is right now, finer than the whole seconds of `time`.
@@ -67,6 +71,15 @@ impl App {
     pub(super) fn toggle_karaoke(&mut self) {
         self.open_lyrics(true);
     }
+    // f in karaoke: the next style of big letters, remembered.
+    pub(super) fn cycle_karaoke_style(&mut self) {
+        use crate::bigtext::STYLES;
+        let at = STYLES.iter().position(|s| s.0 == self.karaoke_style).unwrap_or(0);
+        let (style, name) = STYLES[(at + 1) % STYLES.len()];
+        self.karaoke_style = style;
+        self.db.set_setting("karaoke_style", name);
+        self.set_note(tr!("Karaoke letters: {name}", name = name));
+    }
     pub(super) fn open_lyrics(&mut self, karaoke: bool) {
         self.lyrics = !(self.lyrics && self.karaoke == karaoke);
         self.karaoke = karaoke;
@@ -83,6 +96,9 @@ impl App {
         }
         if cover::is_large(url) {
             self.covers.retain(|k, _| !cover::is_large(k)); // each is megabytes: keep only the one on screen
+        }
+        if self.covers.len() >= COVERS_KEPT {
+            self.covers.clear(); // browsing for hours must not grow memory; the ones still wanted load again
         }
         self.covers.insert(url.to_string(), None);
         let (url, tx) = (url.to_string(), self.tx.clone());
@@ -103,6 +119,9 @@ impl App {
         let key = (url.to_string(), w, h);
         if let Some(hit) = self.rasters.get(&key) {
             return hit.clone();
+        }
+        if self.rasters.len() >= COVERS_KEPT {
+            self.rasters.clear();
         }
         self.rasters.insert(key.clone(), None);
         let (got, tx) = (got.clone(), self.tx.clone());

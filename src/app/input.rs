@@ -1,10 +1,16 @@
 // Everything that arrives goes through `handle`: keys, mouse, mpv events, resizes and the answers of background
 // threads. Then the keys (on_key → menu, typing or command keys) and the mouse (on_mouse), by what is on screen.
+use crate::i18n::tr;
 use super::*;
 
 impl App {
     // True when the screen has to be drawn again.
     pub fn handle(&mut self, m: Msg) -> bool {
+        let redraw = self.handle_one(m);
+        self.refilter(); // the list may have changed under it
+        redraw
+    }
+    fn handle_one(&mut self, m: Msg) -> bool {
         match m {
             // Shift and friends on their own are reported too: they are not keys to act on
             Msg::Key(k) if k.kind != KeyEventKind::Release && !matches!(k.code, KeyCode::Modifier(_)) => self.on_key(k),
@@ -33,7 +39,7 @@ impl App {
             return false;
         }
         self.cmd(json!(["set_property", "pause", true])); // not "cycle": a second change must not start it again
-        self.set_note("Paused: the audio output changed · space resumes".into());
+        self.set_note(tr!("Paused: the audio output changed · space resumes").into());
         true
     }
 
@@ -139,6 +145,27 @@ impl App {
         if self.typing {
             return false;
         }
+        if (self.eq.open || self.downloads.open) && !self.lyrics && !self.full {
+            if wheel != 0 {
+                self.window_key(if wheel < 0 { KeyCode::Up } else { KeyCode::Down });
+                return true;
+            }
+            if let (M::Down(_), Some((x0, x1, y0, y1))) = (e.kind, self.geo.window) {
+                let inside = x >= x0 && x <= x1 && y >= y0 && y <= y1;
+                if let Some(link) = self.geo.links.iter().find(|l| x >= l.1 && x <= l.2 && y == l.3) {
+                    let action = link.0.clone();
+                    self.run(action);
+                    return true;
+                }
+                if inside {
+                    return false;
+                }
+                if y >= self.geo.top && y < self.geo.top + self.geo.body {
+                    if self.eq.open { self.close_eq() } else { self.close_downloads() }
+                    return true;
+                }
+            }
+        }
         match e.kind {
             M::Drag(_) => {
                 // dragging along the progress bar scrubs
@@ -181,6 +208,9 @@ impl App {
                         Control::Next => self.cmd(json!(["playlist-next"])),
                         Control::Repeat => self.cycle_repeat(),
                     }
+                } else if let Some(link) = g.links.iter().find(|l| x >= l.1 && x <= l.2 && y == l.3) {
+                    let action = link.0.clone();
+                    self.run(action);
                 } else if y == g.bar_row {
                     if self.dur > 0.0 && x > g.bar_x0 && x <= g.bar_x0 + g.bar_w {
                         self.drag = true;
@@ -202,6 +232,10 @@ impl App {
     }
 
     // Whatever covers the lists (full player, trip, lyrics, help, a menu) gives way: a search is always seen.
+    // The keys of the window that is open (the equalizer or Downloads).
+    fn window_key(&mut self, code: KeyCode) -> bool {
+        if self.eq.open { self.eq_key(code) } else { self.downloads_key(code) }
+    }
     pub(super) fn show_lists(&mut self) {
         self.full = false;
         self.trip_on = false;
@@ -229,10 +263,18 @@ impl App {
             self.quit = true;
             return;
         }
+        if ctrl && ch == Some('k') && !self.typing {
+            return self.open_palette();
+        }
         // Cmd Shift R (terminals that pass Cmd on) or Ctrl R anywhere: restart without stopping the music
         let cmd = k.modifiers.contains(KeyModifiers::SUPER);
         if matches!(ch, Some('r' | 'R')) && (cmd && (shift || ch == Some('R')) || k.modifiers.contains(KeyModifiers::CONTROL)) {
             self.restart = true;
+            // the new run opens on the same tab (read once, in main)
+            let tab = if self.tab == Tab::Search { self.prev_tab } else { self.tab };
+            if let Some(i) = TABS.iter().position(|&t| t == tab) {
+                self.db.set_setting("restart_tab", &i.to_string());
+            }
             return self.quit_keeping_music();
         }
         if cmd {
@@ -240,7 +282,8 @@ impl App {
         }
         // Space only plays and pauses, wherever you are (except while typing); Shift+Space is Enter.
         let mut code = k.code;
-        if !self.typing && !ctrl && code == KeyCode::Char(' ') {
+        // (and in the command palette, where it separates words)
+        if !self.typing && !ctrl && code == KeyCode::Char(' ') && !(self.menu.is_some() && self.palette.is_some()) {
             if !shift {
                 return self.toggle_pause();
             }
@@ -259,8 +302,8 @@ impl App {
         }
         if self.menu.is_some() {
             self.menu_key(code);
-        } else if self.tab == Tab::Eq && !self.typing && !ctrl && !self.lyrics && !self.full && self.eq_key(code) {
-            // the EQ tab used it
+        } else if (self.eq.open || self.downloads.open) && !self.typing && !ctrl && !self.lyrics && !self.full && self.window_key(code) {
+            // the window used it
         } else if self.typing {
             self.typing_key(code, ctrl);
         } else if !ctrl {
@@ -269,6 +312,9 @@ impl App {
     }
 
     pub(super) fn menu_key(&mut self, code: KeyCode) {
+        if self.palette_key(code) {
+            return;
+        }
         let Some(m) = &mut self.menu else { return };
         let n = m.items.len();
         match code {
@@ -291,6 +337,34 @@ impl App {
     }
 
     pub(super) fn typing_key(&mut self, code: KeyCode, ctrl: bool) {
+        if matches!(self.naming, Some(Naming::Filter)) {
+            match code {
+                // Enter keeps it (empty: no filter); Esc clears it
+                KeyCode::Enter | KeyCode::Esc => {
+                    self.typing = false;
+                    self.naming = None;
+                    if code == KeyCode::Esc || self.buf.trim().is_empty() {
+                        self.drop_filter();
+                    }
+                    return;
+                }
+                KeyCode::Up | KeyCode::Down => return self.move_sel(self.sel as i64 + if code == KeyCode::Up { -1 } else { 1 }),
+                KeyCode::Tab | KeyCode::BackTab => {}
+                _ => {
+                    match code {
+                        KeyCode::Backspace if ctrl => erase_word(&mut self.buf),
+                        KeyCode::Char('w' | 'h') if ctrl => erase_word(&mut self.buf),
+                        KeyCode::Char('u') if ctrl => self.buf.clear(),
+                        KeyCode::Backspace => {
+                            self.buf.pop();
+                        }
+                        KeyCode::Char(c) if !ctrl && !c.is_control() => self.buf.push(c),
+                        _ => {}
+                    }
+                    return self.filter_typed();
+                }
+            }
+        }
         match code {
             KeyCode::Enter => {
                 self.typing = false;
@@ -342,7 +416,7 @@ impl App {
                 Some('y') => {
                     self.trip_lyrics = !self.trip_lyrics;
                     self.db.set_setting("trip_lyrics", if self.trip_lyrics { "on" } else { "off" });
-                    return self.set_note(format!("Lyrics {}", if self.trip_lyrics { "on" } else { "off" }));
+                    return self.set_note(tr!("Lyrics {a}", a = if self.trip_lyrics { tr!("on") } else { tr!("off") }));
                 }
                 _ => {}
             }
@@ -375,7 +449,8 @@ impl App {
         match ch {
             Some('Q') => return self.quit_keeping_music(),
             Some('r') => return self.cycle_repeat(),
-            Some('E') => return self.set_tab(Tab::Eq),
+            Some('E') => return self.open_eq(),
+            Some('B') => return self.open_downloads(),
             Some('D') => return self.open_discover(),
             Some('V') => {
                 self.trip_on = !(self.full && self.trip_on);
@@ -386,6 +461,11 @@ impl App {
                 return;
             }
             Some('Y') => return self.toggle_karaoke(),
+            Some('F') => return self.toggle_follow(),
+            // the playing song's pages, from the keyboard: o its album, O its artist
+            Some('o') => return self.open_playing(false),
+            Some('O') => return self.open_playing(true),
+            Some('f') if self.lyrics && self.karaoke => return self.cycle_karaoke_style(),
             Some('R') => {
                 // radio from the highlighted row, or from what plays when the list is hidden
                 let it = if self.full || self.lyrics { None } else { self.cur().cloned() };
@@ -406,6 +486,12 @@ impl App {
             self.sel = 0;
             self.load_stats();
             return;
+        }
+        if self.tab == Tab::Liked && !self.lyrics && !self.full && !shift && matches!(code, K::Left | K::Right) {
+            return self.switch_liked_view();
+        }
+        if self.results().is_some() && !self.lyrics && !self.full && !shift && matches!(code, K::Left | K::Right) {
+            return self.step_results_tab(if code == K::Left { KINDS.len() - 1 } else { 1 });
         }
         let in_queue = self.tab == Tab::Queue;
         if in_queue && matches!(ch, Some('J' | 'K')) {
@@ -433,15 +519,20 @@ impl App {
             K::Right if shift => self.cmd(json!(["seek", 10])),
             K::Left if self.tab == Tab::Home => self.focus_home(PaneId::Left),
             K::Right if self.tab == Tab::Home => self.focus_home(PaneId::Right),
-            K::Char('l') => self.rate(true, None),
+            K::Char('l') => match self.album_at() {
+                Some(album) => self.like_album(album),
+                None => self.rate(true, None),
+            },
             K::Char('x') => self.rate(false, None),
             K::Char('a') => match self.cur().filter(|t| t.kind == Kind::Track).cloned() {
                 Some(t) => self.run(Action::Enqueue(t)),
-                None => self.set_note("Select a track to queue".into()),
+                None => self.set_note(tr!("Select a track to queue").into()),
             },
             K::Char('d') => {
                 let Some(it) = self.cur().cloned() else { return };
-                if in_queue {
+                if self.tab == Tab::Library {
+                    self.ask_forget();
+                } else if in_queue {
                     self.remove_from_queue(it.uid);
                 } else if self.viewed_playlist().is_some() {
                     self.run(Action::RemoveEntry(it.uid));
@@ -454,7 +545,7 @@ impl App {
                 let shown = if self.full || self.lyrics { None } else { self.cur().filter(|t| t.kind == Kind::Track) };
                 match shown.or_else(|| self.now()).cloned() {
                     Some(t) => self.pick_playlist(vec![t]),
-                    None => self.set_note("Select a song to save".into()),
+                    None => self.set_note(tr!("Select a song to save").into()),
                 }
             }
             K::Char('m') => self.open_menu(),
@@ -473,9 +564,15 @@ impl App {
                 if self.tab == Tab::Config {
                     self.settings = config::rows(&self.db);
                 }
-                self.set_note(format!("Visualizer {}", if self.wave { "on" } else { "off" }));
+                self.set_note(tr!("Visualizer {a}", a = if self.wave { tr!("on") } else { tr!("off") }));
             }
             K::Char('q') => self.quit = true,
+            K::Char('z') => self.sleep_menu(),
+            K::Char('b') => self.download_here(),
+            K::Char('f') => self.start_filter(),
+            K::Char(':') => self.open_palette(),
+            K::Char('u') => self.undo(),
+            K::Char('c') if in_queue && !self.full && !self.lyrics => self.clear_menu(),
             K::Char('/') => self.start_typing(), // the only key that searches
             K::Char('?') => self.help = true,
             K::Char('+' | '=') => self.cmd(json!(["add", "volume", 5])),

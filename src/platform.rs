@@ -16,6 +16,14 @@ pub const INSTALL_HINT: &str = "mpv not found: brew install mpv yt-dlp ffmpeg";
 #[cfg(target_os = "linux")]
 pub const INSTALL_HINT: &str = "mpv not found: install mpv, yt-dlp and ffmpeg with your package manager";
 
+// "~/x" means the home folder.
+pub fn expand(path: &str) -> PathBuf {
+    match path.strip_prefix("~/") {
+        Some(rest) => home_dir().join(rest),
+        None => PathBuf::from(path),
+    }
+}
+
 static QUIT: AtomicBool = AtomicBool::new(false);
 // True once the system asked the program to end (signal, terminal closed).
 pub fn asked_to_quit() -> bool {

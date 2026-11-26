@@ -1,4 +1,5 @@
 // Talking to mpv: its events, the settings it applies, what was heard (for Stats), and the queue it plays.
+use crate::i18n::tr;
 use super::*;
 
 impl App {
@@ -14,9 +15,9 @@ impl App {
     // Off → the whole queue → this song → off.
     pub(super) fn cycle_repeat(&mut self) {
         let (next, all, one, note) = match self.repeat {
-            Repeat::Off => (Repeat::All, "inf", "no", "Repeat: the whole queue"),
-            Repeat::All => (Repeat::One, "no", "inf", "Repeat: this song"),
-            Repeat::One => (Repeat::Off, "no", "no", "Repeat off"),
+            Repeat::Off => (Repeat::All, "inf", "no", tr!("Repeat: the whole queue")),
+            Repeat::All => (Repeat::One, "no", "inf", tr!("Repeat: this song")),
+            Repeat::One => (Repeat::Off, "no", "no", tr!("Repeat off")),
         };
         self.repeat = next;
         self.cmd(json!(["set_property", "loop-playlist", all]));
@@ -39,12 +40,16 @@ impl App {
                 self.fade = config::fade_secs(v);
                 self.apply_fade();
             }
+            "channels" => self.sync_eq(), // a command to the filter already there: no gap
             "vizstyle" => self.viz_style = config::choices("vizstyle").iter().position(|c| *c == v).unwrap_or(0),
+            "mode" => crate::ui::set_light(v == "light"),
+            "language" => crate::i18n::set(v),
             "accent" => self.accent = config::accent(v),
             "player" => self.player_top = v == "top",
             "border" => crate::ui::set_border(config::choices("border").iter().position(|c| *c == v).unwrap_or(0)),
             "pixel" => self.kitty = cover::supported() && v == "off", // the half-block drawing is used wherever kitty is false
             "normalize" => self.cmd(if v == "on" { json!(["af", "add", config::NORMALIZE]) } else { json!(["af", "remove", "@norm"]) }),
+            "library" => self.scan_library(),
             "quality" => {
                 self.format = config::format(v);
                 self.cmd(json!(["set_property", "ytdl-format", self.format])); // tracks yt-dlp has not resolved yet
@@ -80,9 +85,9 @@ impl App {
         if p < at {
             if self.tail.is_none() {
                 // the stream yt-dlp already found: no wait, and only the last seconds are fetched again
-                let Some(url) = self.now().map(|t| self.streams.get(&t.uid).cloned().unwrap_or_else(|| track_url(t))) else { return };
+                let Some(url) = self.now().map(|t| self.streams.get(&t.uid).cloned().unwrap_or_else(|| self.source(t))) else { return };
                 // the same sound as the main player: its equalizer and loudness, set once
-                let mut filters = format!("lavfi=[{}],", crate::eq::graph(&self.eq_current().1));
+                let mut filters = format!("lavfi=[{}],", crate::eq::graph(&self.eq_current().1, self.mono()));
                 if config::value(&self.db, "normalize") == "on" {
                     filters.push_str("lavfi=[dynaudnorm=f=500],");
                 }
@@ -104,12 +109,21 @@ impl App {
         self.crossing = true;
         self.cmd(json!(["playlist-next"]));
     }
+    pub(super) fn pick_setting(&mut self, key: &str, v: &str) {
+        if let Some(v) = config::choose(&self.db, key, v) {
+            self.apply_setting(key, v);
+            self.settings = config::rows(&self.db);
+            if let Some(i) = self.settings.iter().position(|r| r.id == key) {
+                self.sel = i;
+            }
+        }
+    }
     pub(super) fn change_setting(&mut self, dir: i64) {
         let Some(it) = self.cur().filter(|i| i.kind == Kind::Setting).cloned() else { return };
         let v = config::step(&self.db, &it.id, dir);
         self.apply_setting(&it.id, v);
         self.settings = config::rows(&self.db);
-        self.set_note(format!("{}: {v}", it.title));
+        self.set_note(format!("{}: {}", crate::i18n::t(config::label(&it.id)), crate::i18n::t(v)));
     }
     pub(super) fn save_heard(&self, skipped: bool) {
         if let Some(id) = self.play_id {
@@ -226,8 +240,16 @@ impl App {
                 self.msg.clear();
                 self.play_dur = 0.0;
             }
+            "client-message" if e["args"][0] == "rymus-like" => {
+                let t = self.now().cloned();
+                if t.is_some() {
+                    self.rate(true, t);
+                }
+            }
             "file-loaded" => {
                 self.loading = false;
+                self.tell_now();
+                self.sleep_on_song();
                 self.heard = 0.0;
                 self.raw_pos = None;
                 self.sounding = self.now().cloned();
@@ -250,8 +272,8 @@ impl App {
                 self.log_end(reason);
                 if reason == "error" {
                     self.msg = match e["file_error"].as_str() {
-                        Some("loading failed") => "Could not load this track (yt-dlp failed). It may be restricted or unavailable.".into(),
-                        other => format!("Playback error: {}", other.unwrap_or("unknown")),
+                        Some("loading failed") => tr!("Could not load this track (yt-dlp failed). It may be restricted or unavailable.").into(),
+                        other => tr!("Playback error: {a}", a = other.unwrap_or("unknown")),
                     };
                 }
                 if reason != "redirect" && reason != "error" && self.pos >= self.queue.len() as i64 - 1 {
@@ -294,6 +316,13 @@ impl App {
         self.loading = true;
         self.paused = false;
     }
+    // What the player opens for a song.
+    pub(super) fn source(&self, t: &Item) -> String {
+        match self.downloads.files.get(&t.id).filter(|f| f.is_file()) {
+            Some(file) => file.to_string_lossy().into_owned(),
+            None => track_url(t),
+        }
+    }
     pub(super) fn play(&mut self, tracks: Vec<Item>) {
         // songs you added and have not heard yet: from the queue, or from the last run if nothing has played in this one
         let waiting: Vec<Item> = match (&self.session, self.queue.is_empty(), usize::try_from(self.pos)) {
@@ -304,7 +333,7 @@ impl App {
         let tracks = with_added(tracks.into_iter().map(|t| Item { origin: Origin::List, ..t }).collect(), &waiting);
         self.drop_resume_row();
         self.set_queue(tracks);
-        let urls: Vec<String> = self.queue.iter().map(track_url).collect();
+        let urls: Vec<String> = self.queue.iter().map(|t| self.source(t)).collect();
         for (i, url) in urls.iter().enumerate() {
             self.cmd(json!(["loadfile", url, if i > 0 { "append" } else { "replace" }]));
         }
@@ -316,7 +345,7 @@ impl App {
         self.drop_resume_row();
         self.set_queue(s.queue);
         self.endless = s.endless;
-        let urls: Vec<String> = self.queue.iter().map(track_url).collect();
+        let urls: Vec<String> = self.queue.iter().map(|t| self.source(t)).collect();
         for (i, url) in urls.iter().enumerate() {
             let command = if i > 0 { json!(["loadfile", url, "append"]) } else { json!(["loadfile", url, "replace", -1, format!("start={}", s.time)]) };
             self.cmd(command);
@@ -395,7 +424,7 @@ impl App {
         let end = self.queue.len().min((self.pos + 1).max(0) as usize + 5);
         while i < end && self.resolving.len() < 2 {
             let t = &self.queue[i];
-            if !self.direct.contains(&t.id) && !self.resolving.contains(&t.id) {
+            if !self.direct.contains(&t.id) && !self.resolving.contains(&t.id) && !self.downloaded(&t.id) {
                 self.resolving.insert(t.id.clone());
                 let (id, uid, url, tx, format) = (t.id.clone(), t.uid, track_url(t), self.tx.clone(), self.format);
                 std::thread::spawn(move || {
@@ -434,7 +463,7 @@ impl App {
     pub(super) fn queue_track(&mut self, mut t: Item, next: bool) {
         t.uid = self.id();
         t.origin = Origin::Added;
-        let url = track_url(&t);
+        let url = self.source(&t);
         let at = add_position(&self.queue, self.pos, next);
         if at < self.queue.len() {
             self.queue.insert(at, t);

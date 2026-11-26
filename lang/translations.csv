@@ -1,0 +1,693 @@
+english,español
+Loading album…,Cargando álbum…
+Nothing to like in {title},Nada que marcar con me gusta en {title}
+Keep them,Mantenerlos
+Remove {a} likes,Quitar {a} me gusta
+{title} is liked,{title} ya te gusta
+ · {disliked} disliked left out, · {disliked} que no te gustan quedaron fuera
+song,canción
+songs,canciones
+{a} Liked {title}: {b} {what}{left},{a} Te gusta {title}: {b} {what}{left}
+Removed the likes of {title},Se quitaron los me gusta de {title}
+No album,Sin álbum
+Exported to {to},Exportado a {to}
+Could not export: {e},No se pudo exportar: {e}
+Not a rymus export: {e},No es una exportación de rymus: {e}
+Imported {from},Importado desde {from}
+"Nothing was deleted: type ""{wipe_word}"" to delete all your data","No se borró nada: escribe ""{wipe_word}"" para borrar todos tus datos"
+All your data was deleted · rymus starts fresh,Se borraron todos tus datos · rymus empieza de cero
+Could not open the database: {e},No se pudo abrir la base de datos: {e}
+1 song,1 canción
+{n} songs,{n} canciones
+cannot make {a}: {e},no se puede crear {a}: {e}
+yt-dlp failed,falló yt-dlp
+Already downloaded (or on its way),Ya está descargada (o en camino)
+Downloading 1 song,Descargando 1 canción
+Downloading {n} songs,Descargando {n} canciones
+ · {left} to go, · faltan {left}
+Downloaded: {a}{more},Descargada: {a}{more}
+Could not download {a}: {e},No se pudo descargar {a}: {e}
+Keep it,Mantenerla
+Delete the file,Borrar el archivo
+delete the download of {a}?,¿borrar la descarga de {a}?
+Download deleted,Descarga borrada
+Free up space takes a share from 1 to 100 %,Liberar espacio pide un porcentaje de 1 a 100 %
+Nothing to free: {pct} % of your downloads is not a single song,Nada que liberar: el {pct} % de tus descargas no llega a una canción
+"Delete {a}, {b} (played {most} times at most)","Borrar {a}, {b} (reproducidas {most} veces como máximo)"
+free up space: the least played {pct} % of your downloads?,liberar espacio: ¿el {pct} % menos escuchado de tus descargas?
+free up space,liberar espacio
+Freed {a} · {b} deleted,Liberado {a} · {b} borradas
+Nothing plays · b on any song downloads it,No suena nada · b sobre cualquier canción la descarga
+Reset to {a},Volver a {a}
+reset {a}?,¿restablecer {a}?
+{current} is as it came,{current} está como venía
+Delete,Borrar
+delete {a}?,¿borrar {a}?
+{current} is built in: it stays,{current} viene incluido: se queda
+{name} is built in · n makes your own from it,{name} viene incluido · n crea uno tuyo a partir de él
+There is already a profile called {name},Ya hay un perfil llamado {name}
+Flat,Plano
+Created {name} · ← → band · ↑ ↓ gain,Creado {name} · ← → banda · ↑ ↓ ganancia
+{name} is {a} again,{name} vuelve a ser {a}
+Deleted {name},Borrado {name}
+Stop in {m} minutes,Parar en {m} minutos
+Stop when this song ends,Parar cuando termine esta canción
+Stop when {album} ends,Parar cuando termine {album}
+Turn the timer off,Apagar el temporizador
+sleep timer,temporizador para dormir
+Sleep timer on,Temporizador activado
+Sleep timer off,Temporizador desactivado
+sleep in {a} min,dormir en {a} min
+sleep after this song,dormir tras esta canción
+sleep after this album,dormir tras este álbum
+Sleep timer: paused,Temporizador: en pausa
+Keep everything,Mantener todo
+Remove the radio's songs,Quitar las canciones de la radio
+Keep only what plays,Dejar solo lo que suena
+clear the queue,vaciar la cola
+Nothing to remove,Nada que quitar
+Removed {a} songs · u takes it back,Se quitaron {a} canciones · u lo deshace
+Nothing to undo,Nada que deshacer
+Back in the queue,De vuelta en la cola
+{n} songs back in the queue,{n} canciones de vuelta en la cola
+{name} is back,{name} está de vuelta
+{a} is back in the playlist,{a} está de vuelta en la playlist
+{a} likes are back,{a} me gusta de vuelta
+"f filters Liked, the queue, playlists, history and pages","f filtra Me gusta, la cola, las playlists, el historial y las páginas"
+Go to Home,Ir a Inicio
+Go to Playlists,Ir a Playlists
+Go to Liked,Ir a Me gusta
+Go to Library,Ir a Biblioteca
+Go to Queue,Ir a Cola
+Go to History,Ir a Historial
+Go to Stats,Ir a Estadísticas
+Go to Config,Ir a Ajustes
+No such command,No existe ese comando
+{palette} · type to find,{palette} · escribe para buscar
+Paused: the audio output changed · space resumes,En pausa: cambió la salida de audio · espacio continúa
+Lyrics {a},Letras: {a}
+on,sí
+off,no
+Select a track to queue,Elige una canción para encolar
+Select a song to save,Elige una canción para guardar
+Visualizer {a},Visualizador: {a}
+New releases,Nuevos lanzamientos
+Albums,Álbumes
+Artists,Artistas
+Downloaded,Descargadas
+Your music,Tu música
+"F follows an artist: select one, or open their page","F sigue a un artista: elige uno, o abre su página"
+No longer following {a},Ya no sigues a {a}
+Following {a}…,Siguiendo a {a}…
+Following {a} · new releases show in Library,Sigues a {a} · sus lanzamientos aparecen en Biblioteca
+Stop following,Dejar de seguir
+Remove from library,Quitar de la biblioteca
+Dismiss,Descartar
+ · last {shown} of {a}, · últimas {shown} de {a}
+Disliked{more},No me gusta{more}
+⏯ Resume: {a},⏯ Continuar: {a}
+{a} · at {b},{a} · en {b}
++ New playlist,+ Nueva playlist
+or paste a link with /,o pega un enlace con /
+✦ Discover,✦ Descubrir
+new songs · mixes by style,canciones nuevas · mezclas por estilo
+Up next,A continuación
+Recently played,Escuchado hace poco
+search again,buscar de nuevo
+Playlists,Playlists
+Top artists · this month,Artistas top · este mes
+Recent searches,Búsquedas recientes
+Listen,Escuchar
+Library,Biblioteca
+Home,Inicio
+Karaoke letters: {name},Letras del karaoke: {name}
+<1 min,<1 min
+{a} min,{a} min
+like,me gusta
+dislike,no me gusta
+Nothing to {verb},Nada a lo que darle {verb}
+Removed {verb},Se quitó el {verb}
+{a} Liked,{a} Me gusta
+{a} Disliked,{a} No me gusta
+Nothing playing,No suena nada
+No album known for this song,No se conoce el álbum de esta canción
+Next: {a},A continuación: {a}
+Queued: {a},En cola: {a}
+This playlist is empty,Esta playlist está vacía
+Already in {name},Ya está en {name}
+Added to {name},Agregada a {name}
+Added {n} songs to {name},Se agregaron {n} canciones a {name}
+delete {name}?,¿borrar {name}?
+Playlist deleted,Playlist borrada
+Open album,Abrir álbum
+Open artist,Abrir artista
+Open Discover,Abrir Descubrir
+Play mix,Reproducir mezcla
+Open playlist,Abrir playlist
+New playlist,Nueva playlist
+Search again,Buscar de nuevo
+Build the list,Armar la lista
+Shuffle,Aleatorio
+Play all,Reproducir todo
+Resume,Continuar
+Play,Reproducir
+Rename,Renombrar
+Delete…,Borrar…
+Like the whole album,Me gusta todo el álbum
+Save as playlist…,Guardar como playlist…
+Jump to this track,Saltar a esta canción
+"Play, then similar songs",Reproducir y luego similares
+Play from here,Reproducir desde aquí
+Play next,Reproducir a continuación
+Add to queue,Agregar a la cola
+Remove like,Quitar me gusta
+Like,Me gusta
+Remove dislike,Quitar no me gusta
+Dislike,No me gusta
+Go to artist,Ir al artista
+Add to playlist…,Agregar a playlist…
+Go to album,Ir al álbum
+Delete download,Borrar descarga
+Download,Descargar
+Remove from queue,Quitar de la cola
+Save queue as playlist…,Guardar la cola como playlist…
+Remove from playlist,Quitar de la playlist
+Start radio,Iniciar radio
+{a} failed: {e},{a} falló: {e}
+▶ Play album,▶ Reproducir álbum
+⤮ Shuffle,⤮ Aleatorio
+Songs,Canciones
+No album found: {a},No se encontró el álbum: {a}
+Nothing found for this artist,No se encontró nada de este artista
+✦ This is {name},✦ Esto es {name}
+Popular songs,Canciones populares
+Building This is {a}…,Armando Esto es {a}…
+No songs found for {a},No se encontraron canciones de {a}
+This is {a},Esto es {a}
+▶ Play,▶ Reproducir
+Loading artist…,Cargando artista…
+No artist found: {name},No se encontró el artista: {name}
+Play or like a few songs first,Primero reproduce o marca con me gusta algunas canciones
+✦ Everything new,✦ Todo lo nuevo
+from all your taste,de todo tu gusto
+Discover · only songs you have not heard,Descubrir · solo canciones que no has escuchado
+Reading your styles…,Leyendo tus estilos…
+No styles yet: listen to more artists,Aún no hay estilos: escucha más artistas
+By style,Por estilo
+Styles unavailable: {e},Estilos no disponibles: {e}
+Building {label}…,Armando {label}…
+"Nothing new found, try another mix","No se encontró nada nuevo, prueba otra mezcla"
+ · without ListenBrainz, · sin ListenBrainz
+{label}: {fresh} new songs{without},{label}: {fresh} canciones nuevas{without}
+Nothing to start a radio from,Nada desde donde iniciar una radio
+Radio · {a},Radio · {a}
+Radio · {artist},Radio · {artist}
+Repeat: the whole queue,Repetir: toda la cola
+Repeat: this song,Repetir: esta canción
+Repeat off,Sin repetir
+Could not load this track (yt-dlp failed). It may be restricted or unavailable.,No se pudo cargar esta canción (falló yt-dlp). Puede estar restringida o no disponible.
+Playback error: {a},Error de reproducción: {a}
+{a} songs,{a} canciones
++ New playlist…,+ Nueva playlist…
+add to playlist · {title},agregar a playlist · {title}
+Downloads go to {name} from now on,Las descargas van a {name} desde ahora
+Created {name},Creada {name}
+Could not save the playlist,No se pudo guardar la playlist
+Already imported: {name},Ya importada: {name}
+Wait for the current import to finish,Espera a que termine la importación actual
+Importing playlist…,Importando playlist…
+Importing playlist… {done}/{total},Importando playlist… {done}/{total}
+Import failed: {e},Falló la importación: {e}
+Imported playlist,Playlist importada
+Imported {a} songs,Se importaron {a} canciones
+ · {a} not found, · {a} no encontradas
+ · only the first {a}, · solo las primeras {a}
+No similar songs: {e},No hay canciones similares: {e}
+Searching…,Buscando…
+search thread failed,falló el hilo de búsqueda
+Nothing found,No se encontró nada
+"Results for ""{text}""","Resultados de ""{text}"""
+Loading more failed: {e},Falló al cargar más: {e}
+Today,Hoy
+Yesterday,Ayer
+"keep songs as files, read your own music, see the room it takes and free some (also B from anywhere)","guarda canciones como archivos, lee tu propia música, mira cuánto ocupa y libera espacio (también B desde cualquier parte)"
+Downloads and your music: {folder}…,Descargas y tu música: {folder}…
+Equalizer: {a}…,Ecualizador: {a}…
+"ten bands, ready made profiles and your own (also E from anywhere)","diez bandas, perfiles listos y los tuyos (también E desde cualquier parte)"
+Data,Datos
+Export your data…,Exportar tus datos…
+"everything (likes, playlists, history, settings) as CSV files in a new folder: open them in any spreadsheet, keep them, or take them to another computer","todo (me gusta, playlists, historial, ajustes) como archivos CSV en una carpeta nueva: ábrelos en cualquier hoja de cálculo, guárdalos o llévalos a otro computador"
+Import data…,Importar datos…
+"replace everything here with an exported folder: what is here now is lost, so export it first if you want to keep it","reemplaza todo lo de aquí con una carpeta exportada: lo que hay ahora se pierde, así que expórtalo antes si quieres conservarlo"
+Delete all my data…,Borrar todos mis datos…
+"erases your likes, playlists, listening history, searches and settings for good, and rymus starts empty, as on its first run. To be sure, you type ""delete all my data""","borra para siempre tus me gusta, playlists, historial, búsquedas y ajustes, y rymus empieza vacío, como la primera vez. Para confirmar, escribes ""delete all my data"""
+Hook {event} could not start ({e}): is it executable?,El hook {event} no pudo iniciar ({e}): ¿es ejecutable?
+"Hook {event} failed, see {a}","El hook {event} falló, mira {a}"
+usage: rymus ctl play-pause | next | prev | volume-up | volume-down | like | status,uso: rymus ctl play-pause | next | prev | volume-up | volume-down | like | status
+rymus is not playing,
+nothing is playing,no suena nada
+"unknown command: {other}
+rymus help lists them","comando desconocido: {other}
+rymus help los lista"
+cannot open {a}: {e},no se puede abrir {a}: {e}
+cannot talk to mpv: it did not start,no se puede hablar con mpv: no inició
+cannot find rymus to restart it,no se encuentra rymus para reiniciarlo
+could not restart: {error}{a},no se pudo reiniciar: {error}{a}
+" · the music keeps playing, run rymus again"," · la música sigue sonando, vuelve a abrir rymus"
+The music keeps playing. Run rymus to control it; q there stops it.,La música sigue sonando. Abre rymus para controlarla; ahí q la detiene.
+nothing to start from yet: play or like a few songs,aún no hay de dónde partir: reproduce o marca con me gusta algunas canciones
+no recommendations,sin recomendaciones
+ListenBrainz did not recognize your artists or is unreachable,ListenBrainz no reconoció tus artistas o no responde
+Spotify did not show this playlist (is it public?),Spotify no mostró esta playlist (¿es pública?)
+no songs found (is the playlist public?),no se encontraron canciones (¿la playlist es pública?)
+Artist,Artista
+{year}{songs} songs,{year}{songs} canciones
+l likes the album,l marca el álbum con me gusta
+Config · ↑ ↓ choose · ← → change,Ajustes · ↑ ↓ elegir · ← → cambiar
+this song,esta canción
+next song,siguiente
+"one ends, the next starts: no overlap","una termina, la otra empieza: sin superponerse"
+╰{a}╯ {b} s together,╰{a}╯ {b} s juntas
+Folder,Carpeta
+Change folder…,Cambiar carpeta…
+Download what plays{a},Descargar lo que suena{a}
+Download all liked songs,Descargar todas las que me gustan
+Free up space…,Liberar espacio…
+download what plays,descargar lo que suena
+Downloads,Descargas
+{a} downloaded,{a} descargadas
+{ours} songs,{ours} canciones
+ · {own} of your own, · {own} tuyas
+" · downloading, {n} to go"," · descargando, faltan {n}"
+ BUILT IN, INCLUIDOS
+ YOURS, TUYOS
+  + New profile,  + Nuevo perfil
+Widen the window to see the sliders.,Agranda la ventana para ver los controles.
+{a} Hz · {b} · {c} dB,{a} Hz · {b} · {c} dB
+built in,incluido
+same as,igual a
+edited from,editado a partir de
+yours · {edited} {a},tuyo · {edited} {a}
+new from this,nuevo a partir de este
+new from this to edit it,nuevo a partir de este para editarlo
+EQ · {current},EQ · {current}
+play / pause,reproducir / pausar
+back / close,volver / cerrar
+close karaoke,cerrar karaoke
+close lyrics,cerrar letras
+erase word,borrar palabra
+search or import link,buscar o importar enlace
+react to music on,reaccionar a la música: sí
+react to music off,reaccionar a la música: no
+lyrics on,letras: sí
+lyrics off,letras: no
+play mix,reproducir mezcla
+Listen/Library,Escuchar/Biblioteca
+by album,por álbum
+to playlist,a playlist
+Liked{a},Me gusta{a}
+Library ✦{a},Biblioteca ✦{a}
+Queue{a},Cola{a}
+History,Historial
+Stats,Estadísticas
+Config,Ajustes
+"Export to · a new folder of CSV files · Enter saves, Esc cancels","Exportar a · una carpeta nueva de archivos CSV · Enter guarda, Esc cancela"
+a folder path,una ruta de carpeta
+"Import from · replaces all your data · Enter, or Esc","Importar desde · reemplaza todos tus datos · Enter, o Esc"
+the folder of an export,la carpeta de una exportación
+"⚠ This erases all your data for good · type ""delete all my data"" and Enter, or Esc to keep it","⚠ Esto borra todos tus datos para siempre · escribe ""delete all my data"" y Enter, o Esc para conservarlos"
+"Free up space · the least played share of your downloads, in % · Enter, or Esc","Liberar espacio · la parte menos escuchada de tus descargas, en % · Enter, o Esc"
+"Downloads folder · Enter saves, Esc cancels","Carpeta de descargas · Enter guarda, Esc cancela"
+Filter this list · Enter keeps · Esc clears,Filtrar esta lista · Enter la deja · Esc la quita
+"type a title, artist or album","escribe un título, artista o álbum"
+Name,Nombre
+/ Search,/ Buscar
+"artists, albums, songs, or a Spotify / YouTube playlist link","artistas, álbumes, canciones, o un enlace de playlist de Spotify / YouTube"
+ · ↑↓ for more, · ↑↓ para más
+Keys{more} · any other key closes,Teclas{more} · cualquier otra tecla cierra
+Actions · {a},Acciones · {a}
+ · not synced, · no sincronizadas
+Karaoke,Karaoke
+Lyrics,Letras
+ · w to react to the music, · w para reaccionar a la música
+ · held, · fija
+Trip · {a}{held}{react},Viaje · {a}{held}{react}
+Now playing,Sonando
+{a}  Liked · l to remove,{a}  Te gusta · l para quitar
+{a}  Disliked · x to remove,{a}  No te gusta · x para quitar
+{a}  l like  ·  {b}  x dislike,{a}  l me gusta  ·  {b}  x no me gusta
+vol {a},vol {a}
+stopped at {a} · resume it from Home,detenido en {a} · continúa desde Inicio
+Last session,Última sesión
+Preview,Vista previa
+⏯ Resume: {a} (Home),⏯ Continuar: {a} (Inicio)
+ {length}  vol {a}, {length}  vol {a}
+ · added by you, · agregada por ti
+ · radio, · radio
+Config · ← → or ⏎ to change,Ajustes · ← → o ⏎ para cambiar
+Liked · by album,Me gusta · por álbum
+Liked · ← → by album,Me gusta · ← → por álbum
+No likes yet. Press l on any track.,Aún no hay me gusta. Presiona l en cualquier canción.
+Queue,Cola
+"The queue is empty. Press Enter on a track, or a to add one.","La cola está vacía. Presiona Enter en una canción, o a para agregarla."
+Nothing listened yet.,Aún no has escuchado nada.
+"Nothing yet: l on an album saves it, F follows an artist.","Aún nada: l en un álbum lo guarda, F sigue a un artista."
+Empty playlist. Press s on any song to add it.,Playlist vacía. Presiona s en cualquier canción para agregarla.
+Results,Resultados
+No results.,Sin resultados.
+No songs found.,No se encontraron canciones.
+No albums found.,No se encontraron álbumes.
+No artists found.,No se encontraron artistas.
+"Filter ""{a}"" · {b} · esc clears","Filtro ""{a}"" · {b} · esc lo quita"
+Nothing matches.,Nada coincide.
+Per month,Por mes
+Per day,Por día
+By hour of day,Por hora del día
+Listened,Escuchado
+Minutes listened,Minutos escuchados
+Stats · top 100 {a} · last {b} days,Estadísticas · top 100 {a} · últimos {b} días
+Nothing listened in this period yet.,Aún no has escuchado nada en este período.
+Karaoke needs synced lyrics · y shows the words,El karaoke necesita letras sincronizadas · y muestra la letra
+{a} Looking for lyrics…,{a} Buscando la letra…
+Could not reach LRCLIB. Press y twice to retry.,No se pudo conectar con LRCLIB. Presiona y dos veces para reintentar.
+♪ Instrumental ♪,♪ Instrumental ♪
+No lyrics found on LRCLIB.,No se encontró la letra en LRCLIB.
+Language,Idioma
+"the language of the app, rymus help and the manual; add one with rymus translations (see the manual)","el idioma de la app, de rymus help y del manual; agrega uno con rymus translations (mira el manual)"
+Crossfade,Fundido
+"the end of each song plays over the start of the next one, one fading out while the other fades in","el final de cada canción suena sobre el inicio de la siguiente, una se apaga mientras la otra entra"
+Sound,Sonido
+Even out loudness,Igualar volumen
+quiet and loud songs play at a similar level,las canciones bajas y altas suenan a un nivel parecido
+Channels,Canales
+"mono plays the same mix of left and right on both sides, for one earbud or one good ear","mono suena con la misma mezcla de izquierda y derecha en ambos lados, para un solo audífono o un solo oído bueno"
+Audio quality,Calidad de audio
+best,la mejor
+data saver,ahorro de datos
+"data saver streams the smallest audio there is, for slow or metered connections","ahorro de datos transmite el audio más liviano que hay, para conexiones lentas o con límite"
+Streaming,Transmisión
+Pixel art covers,Portadas pixel art
+"draw every cover as colored blocks, even where the terminal can show the image","dibuja cada portada con bloques de color, aunque la terminal pueda mostrar la imagen"
+Screen,Pantalla
+Visualizer,Visualizador
+the moving spectrum in the player (also w),el espectro en movimiento del reproductor (también w)
+Visualizer style,Estilo del visualizador
+"how the spectrum is drawn: dots rising, solid bars, a line of dots, or a mirror growing from the middle","cómo se dibuja el espectro: puntos que suben, barras sólidas, una línea de puntos, o un espejo que crece desde el centro"
+Mode,Modo
+"match your terminal's background: every color is chosen to read well on it, the accent included","igual al fondo de tu terminal: cada color se elige para leerse bien en él, el de acento incluido"
+Look,Apariencia
+Color,Color
+"the color of the frames, the selection and the player: taken from what plays, or always the same","el color de los marcos, la selección y el reproductor: tomado de lo que suena, o siempre el mismo"
+Player,Reproductor
+"where the player sits: under the lists, or above them","dónde va el reproductor: bajo las listas, o sobre ellas"
+Borders,Bordes
+"how the frames are drawn: lines, dashes, dots, blocks, or ornate scrolls in plain ASCII","cómo se dibujan los marcos: líneas, guiones, puntos, bloques, o volutas adornadas en ASCII"
+Pause on output change,Pausar al cambiar la salida
+pause when headphones are unplugged or the audio output changes,pausa al desconectar audífonos o cuando cambia la salida de audio
+Output,Salida
+Keep offline,Guardar sin conexión
+liked songs,canciones que me gustan
+"download every song you like from now on; it plays from the file, with or without network (b downloads any song)","descarga cada canción que marques con me gusta desde ahora; suena desde el archivo, con o sin red (b descarga cualquier canción)"
+File format,Formato de archivo
+"what downloaded songs are saved as; original keeps what YouTube sends, without converting","cómo se guardan las canciones descargadas; original guarda lo que manda YouTube, sin convertir"
+Your own music,Tu propia música
+"the songs already in the folder, yours from anywhere (mp3, flac, m4a…), show in Library and play from disk","las canciones que ya están en la carpeta, tuyas de donde sea (mp3, flac, m4a…), aparecen en Biblioteca y suenan desde el disco"
+Bass boost,Más graves
+Bass cut,Menos graves
+Treble boost,Más agudos
+Vocal,Voz
+Rock,Rock
+Pop,Pop
+Electronic,Electrónica
+Acoustic,Acústica
+Loudness,Sonoridad
+Sub-bass,Subgraves
+the rumble you feel more than hear: deep kicks and synth bass,el retumbe que sientes más de lo que oyes: bombos profundos y bajos sintetizados
+Bass,Graves
+the weight of the kick drum and the bass guitar,el peso del bombo y del bajo
+Upper bass,Graves altos
+warmth and body; too much sounds boomy,calidez y cuerpo; demasiado suena retumbante
+Low mids,Medios bajos
+the fullness of guitars and pianos; too much sounds muddy,la plenitud de guitarras y pianos; demasiado suena empastado
+Mids,Medios
+the body of voices and snares; too much sounds boxy,el cuerpo de voces y cajas; demasiado suena encajonado
+where most instruments sit; more brings them forward,donde están la mayoría de los instrumentos; más los trae adelante
+Upper mids,Medios altos
+attack and bite; too much sounds harsh,ataque y mordida; demasiado suena áspero
+Presence,Presencia
+the clarity of voices and consonants,la claridad de las voces y las consonantes
+Treble,Agudos
+cymbals and sparkle; too much makes the s sounds hiss,platillos y brillo; demasiado hace silbar las eses
+Air,Aire
+openness and shimmer at the very top,apertura y destello en lo más alto
+bass,graves
+mids,medios
+treble,agudos
+Sun,dom
+Mon,lun
+Tue,mar
+Wed,mié
+Thu,jue
+Fri,vie
+Sat,sáb
+Jan,ene
+Feb,feb
+Mar,mar
+Apr,abr
+May,may
+Jun,jun
+Jul,jul
+Aug,ago
+Sep,sep
+Oct,oct
+Nov,nov
+Dec,dic
+Play / pause,Reproducir / pausar
+Next song,Siguiente canción
+Previous song,Canción anterior
+Search,Buscar
+Filter this list,Filtrar esta lista
+Save to a playlist,Guardar en una playlist
+Radio from this song,Radio desde esta canción
+Discover,Descubrir
+Big player,Reproductor grande
+Trip visualizer,Visualizador viaje
+Equalizer,Ecualizador
+"Repeat: queue, song, off","Repetir: cola, canción, no"
+Sleep timer,Temporizador para dormir
+Download this song,Descargar esta canción
+Follow this artist,Seguir a este artista
+Undo,Deshacer
+Album of what plays,Álbum de lo que suena
+Artist of what plays,Artista de lo que suena
+Visualizer on / off,Visualizador sí / no
+All the keys,Todas las teclas
+"Quit, music stays","Salir, la música sigue"
+"where songs are downloaded to, and your own music is read from; what is already there stays",dónde se descargan las canciones y desde dónde se lee tu propia música; lo que ya está ahí se queda
+"the song that plays now; b downloads the highlighted song anywhere, m → Download too","la canción que suena ahora; b descarga la canción seleccionada en cualquier parte, m → Descargar también"
+"everything you have liked that is not on disk yet, one song at a time","todo lo que te gusta y aún no está en el disco, una canción a la vez"
+"deletes the least played share of the songs rymus downloaded (you type the %), after showing what it frees; your own files are never touched","borra la parte menos escuchada de las canciones que descargó rymus (escribes el %), tras mostrar cuánto libera; tus propios archivos nunca se tocan"
+Playback,Reproducción
+space,espacio
+next / previous,siguiente / anterior
+"repeat: queue, song, off","repetir: cola, canción, no"
+seek 10 s,avanzar 10 s
+volume,volumen
+Move,Moverse
+move,mover
+⏎ ⇧space,⏎ ⇧espacio
+open / play,abrir / reproducir
+esc,
+"back, then Home","volver, luego Inicio"
+tab,
+next section,siguiente sección
+Home column,columna de Inicio
+Song,Canción
+add to queue,agregar a la cola
+"play next, more…","siguiente, más…"
+like song or album,me gusta canción o álbum
+save to playlist,guardar en playlist
+radio,radio
+"playing: album, artist","sonando: álbum, artista"
+follow artist,seguir artista
+downloads and your music,descargas y tu música
+Queue & playlists,Cola y playlists
+remove / delete,quitar / borrar
+move in queue,mover en la cola
+"rename, play","renombrar, reproducir"
+search,buscar
+filter this list,filtrar esta lista
+any command,cualquier comando
+result tabs,pestañas de resultados
+past searches,búsquedas anteriores
+ctrl U,
+erase all,borrar todo
+paste link,pegar enlace
+import playlist,importar playlist
+Views,Vistas
+full player,reproductor grande
+trip · [ ] scene · . hold,viaje · [ ] escena · . fijar
+lyrics,letras
+karaoke · f letters,karaoke · f letras
+visualizer on / off,visualizador sí / no
+equalizer,ecualizador
+More,Más
+discover,descubrir
+undo,deshacer
+"Stats, Liked views",vistas de Estadísticas y Me gusta
+quit,salir
+"quit, music stays","salir, la música sigue"
+ctrl R,
+restart,reiniciar
+mouse: click · double-click plays · right-click menu · drag the bar to seek,mouse: clic · doble clic reproduce · clic derecho menú · arrastra la barra para avanzar
+close,cerrar
+resume,continuar
+pause,pausar
+run,ejecutar
+words,letra
+letters,letras
+scroll,desplazar
+karaoke,karaoke
+next/prev,sig/ant
+seek,avanzar
+keys,teclas
+save,guardar
+clear,limpiar
+cancel,cancelar
+history,historial
+scene,escena
+hold,fijar
+choose,elegir
+play,reproducir
+change,cambiar
+jump,saltar
+open,abrir
+sections,secciones
+play/rename,reproducir/renombrar
+delete,borrar
+songs/artists/albums,canciones/artistas/álbumes
+week/month/year,semana/mes/año
+filter,filtrar
+remove,quitar
+songs/albums/artists,canciones/álbumes/artistas
+back,volver
+queue,encolar
+menu,menú
+artists,artistas
+albums,álbumes
+week,semana
+month,mes
+year,año
+rymus,
+open the player,abre el reproductor
+rymus ctl ACTION,
+control the rymus that is playing,controla el rymus que está sonando
+rymus man,
+read the manual (piped or redirected: write it as a man page),lee el manual (redirigido o en un pipe: lo escribe como página de man)
+rymus help,
+"this help; also -h, --help. rymus --version (-V) says which one you run","esta ayuda; también -h, --help. rymus --version (-V) dice cuál usas"
+rymus translations,
+"every text with its translations, as CSV, to add a language","todos los textos con sus traducciones, en CSV, para agregar un idioma"
+play-pause,
+pause or go on,pausar o seguir
+next,
+prev,
+previous song,canción anterior
+volume-up,
+5 louder,5 más fuerte
+volume-down,
+5 quieter,5 más bajo
+"like what plays, or take the like back (not while only the music plays on after Q)","marca con me gusta lo que suena, o lo quita (no mientras solo la música sigue tras Q)"
+status,
+"one line: playing or paused, title and artist","una línea: sonando o en pausa, título y artista"
+you like a song,marcas una canción con me gusta
+unliked,
+"you remove the like, or dislike a liked song","quitas el me gusta, o marcas con no me gusta una que te gustaba"
+disliked,
+you dislike a song,marcas una canción con no me gusta
+playlist-add,
+you add one song to a playlist,agregas una canción a una playlist
+playlist-remove,
+you remove a song from a playlist,quitas una canción de una playlist
+playing,
+a song starts,empieza una canción
+played,
+it reaches its end,llega a su final
+skipped,
+you move on before its end,pasas a otra antes de que termine
+download-started,
+a song starts downloading,una canción empieza a descargarse
+downloaded,
+"a song's file is ready (its path in ""path"")","el archivo de una canción está listo (su ruta en ""path"")"
+download-failed,
+a download did not work,una descarga no funcionó
+download-deleted,
+a downloaded file is deleted,se borra un archivo descargado
+~/.rymus/rymus.db,
+"likes, playlists, history and settings","me gusta, playlists, historial y ajustes"
+~/.rymus/hooks/NAME,
+your executable for the event NAME,tu ejecutable para el evento NOMBRE
+~/.rymus/hooks.log,
+what the hooks print,lo que imprimen los hooks
+YM_DB,
+use another database file,usar otro archivo de base de datos
+YM_PLAIN=1,
+no Nerd Font icons,sin íconos de Nerd Font
+YM_MPV_ARGS,
+more options for mpv,más opciones para mpv
+"Search YouTube Music and play it inside the terminal, without an account. Press / to search, Enter to play, Space to pause, ? for the keys and : to find any command.","Busca en YouTube Music y escúchalo dentro de la terminal, sin cuenta. Presiona / para buscar, Enter para reproducir, Espacio para pausar, ? para las teclas y : para encontrar cualquier comando."
+Values,Valores
+User Commands,Comandos de usuario
+Synopsis,Sinopsis
+Description,Descripción
+Commands,Comandos
+Keys,Teclas
+Settings,Ajustes
+Hooks,Hooks
+Files,Archivos
+Environment,Entorno
+Requirements,Requisitos
+See also,Ver también
+YouTube Music in the terminal,YouTube Music en la terminal
+Actions for rymus ctl,Acciones de rymus ctl
+Keys (inside rymus),Teclas (dentro de rymus)
+"Changed in the Config tab, or in the windows it opens; the first value is the default.","Se cambian en la pestaña Ajustes, o en las ventanas que abre; el primer valor es el predeterminado."
+"Executables of yours, named after what happens. Each gets one JSON object (event, id, url, title, artist, album, cover) on its standard input.","Ejecutables tuyos, con el nombre de lo que pasa. Cada uno recibe un objeto JSON (event, id, url, title, artist, album, cover) por su entrada estándar."
+stereo,estéreo
+mono,mono
+dots,puntos
+bars,barras
+line,línea
+mirror,espejo
+dark,oscuro
+light,claro
+bottom,abajo
+top,arriba
+from cover,de la portada
+original,original
+rounded,redondeados
+square,cuadrados
+heavy,gruesos
+double,dobles
+dashed,guiones
+dotted,punteados
+deco,deco
+block,bloque
+ascii,ascii
+ornate,adornados
+commands,comandos
+english,inglés
+español,español
+red,rojo
+coral,coral
+orange,naranja
+yellow,amarillo
+lime,lima
+green,verde
+teal,verde azulado
+cyan,cian
+blue,azul
+purple,morado
+magenta,magenta
+pink,rosado
+white,blanco

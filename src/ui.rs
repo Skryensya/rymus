@@ -5,12 +5,43 @@ use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 pub type Rgb = [u8; 3];
 pub const RED: Rgb = [232, 36, 36];
-pub const GRAY: Rgb = [90, 90, 90];
-pub const BAR: Rgb = [28, 28, 28];
-pub const RIB: Rgb = [48, 48, 52];
-pub const TXT: Rgb = [208, 208, 208];
-pub const BLACK: Rgb = [0, 0, 0];
 pub const GREEN: Rgb = [166, 209, 137];
+
+// Dark or light terminal (Config > Look > Mode): every color but the accent has one of each. Per thread, like the
+// border style: the app draws on one, and each test runs on its own.
+thread_local!(static LIGHT: std::cell::Cell<bool> = const { std::cell::Cell::new(false) });
+pub fn set_light(on: bool) {
+    LIGHT.set(on);
+}
+fn pick(dark: Rgb, light: Rgb) -> Rgb {
+    if LIGHT.get() { light } else { dark }
+}
+pub fn gray() -> Rgb {
+    pick([90, 90, 90], [178, 178, 178]) // frames not in focus
+}
+pub fn bar() -> Rgb {
+    pick([28, 28, 28], [232, 232, 234]) // the tab bar
+}
+pub fn rib() -> Rgb {
+    pick([48, 48, 52], [216, 216, 222]) // tabs, labels and the selected row
+}
+pub fn txt() -> Rgb {
+    pick([208, 208, 208], [45, 45, 48])
+}
+pub fn on_accent() -> Rgb {
+    pick([0, 0, 0], [255, 255, 255]) // text on the accent
+}
+pub fn strong() -> Rgb {
+    pick([255, 255, 255], [0, 0, 0]) // the selected row's text, and what the spectrum's tints fade towards
+}
+// The accent as it is drawn: on a light background a pale one is darkened until it reads well.
+pub fn readable(c: Rgb) -> Rgb {
+    let lum = 0.2126 * c[0] as f64 + 0.7152 * c[1] as f64 + 0.0722 * c[2] as f64;
+    if !LIGHT.get() || lum <= 110.0 {
+        return c;
+    }
+    c.map(|v| (v as f64 * 110.0 / lum).round() as u8)
+}
 pub const RESET: &str = "\x1b[0m";
 
 pub struct Glyphs {
@@ -37,19 +68,44 @@ pub fn glyphs() -> &'static Glyphs {
     })
 }
 
-// The frames' line style, chosen in Config: rounded, square, heavy or double.
+// The frames' style, chosen in Config. Each edge is a pattern repeated along it (one column per character), so a
+// border can be ornate: corners, the top and bottom edges, and the sides, which go down a row at a time.
 // Per thread: the app draws on one, and each test runs on its own.
+pub struct Border {
+    pub corners: [char; 4], // top left, top right, bottom left, bottom right
+    pub top: &'static str,
+    pub bottom: &'static str,
+    pub left: &'static str,
+    pub right: &'static str,
+}
+// In the order of Config's choices.
+pub const BORDERS: [Border; 10] = [
+    Border { corners: ['╭', '╮', '╰', '╯'], top: "─", bottom: "─", left: "│", right: "│" }, // rounded
+    Border { corners: ['┌', '┐', '└', '┘'], top: "─", bottom: "─", left: "│", right: "│" }, // square
+    Border { corners: ['┏', '┓', '┗', '┛'], top: "━", bottom: "━", left: "┃", right: "┃" }, // heavy
+    Border { corners: ['╔', '╗', '╚', '╝'], top: "═", bottom: "═", left: "║", right: "║" }, // double
+    Border { corners: ['╭', '╮', '╰', '╯'], top: "┄", bottom: "┄", left: "┆", right: "┆" }, // dashed
+    Border { corners: ['·', '·', '·', '·'], top: "┈", bottom: "┈", left: "┊", right: "┊" }, // dotted
+    Border { corners: ['╒', '╕', '╘', '╛'], top: "═", bottom: "═", left: "│", right: "│" }, // deco
+    Border { corners: ['▛', '▜', '▙', '▟'], top: "▀", bottom: "▄", left: "▌", right: "▐" }, // block
+    Border { corners: ['+', '+', '+', '+'], top: "-", bottom: "-", left: "|", right: "|" }, // ascii
+    // ornate, in plain ASCII: scrolls along the edges and curls down the sides
+    Border { corners: ['@', '@', '@', '@'], top: "-~=*=~", bottom: "-~=*=~", left: "{}", right: "}{" },
+];
 thread_local!(static BORDER: std::cell::Cell<usize> = const { std::cell::Cell::new(0) });
 pub fn set_border(style: usize) {
-    BORDER.set(style);
+    BORDER.set(style.min(BORDERS.len() - 1));
 }
-// (top left, top right, bottom left, bottom right, across, down)
-pub fn border() -> [&'static str; 6] {
-    match BORDER.get() {
-        1 => ["┌", "┐", "└", "┘", "─", "│"],
-        2 => ["┏", "┓", "┗", "┛", "━", "┃"],
-        3 => ["╔", "╗", "╚", "╝", "═", "║"],
-        _ => ["╭", "╮", "╰", "╯", "─", "│"],
+pub fn border() -> &'static Border {
+    &BORDERS[BORDER.get()]
+}
+impl Border {
+    // `n` columns of an edge's pattern, starting `from` columns in, so the pattern runs on past the title.
+    fn edge(pattern: &str, from: usize, n: usize) -> String {
+        pattern.chars().cycle().skip(from).take(n).collect()
+    }
+    fn side(pattern: &str, row: usize) -> char {
+        pattern.chars().nth(row % pattern.chars().count()).unwrap_or('|')
     }
 }
 
@@ -139,12 +195,12 @@ pub fn tab_bar(w: usize, tabs: &[(String, &str)], active: usize, accent: Rgb) ->
     // brand: the " ♫ rymus " label first, left out when even the short tabs do not fit with it; on the narrowest
     // screens only the tab you are on is shown
     let build = |short: bool, brand: bool, all: bool| {
-        let mut items = if brand { vec![(" ♫ rymus ".to_string(), BAR, accent, true)] } else { vec![] };
+        let mut items = if brand { vec![(" ♫ rymus ".to_string(), bar(), accent, true)] } else { vec![] };
         let mut index = Vec::new(); // tab number of each item after the brand
         for (i, (full, small)) in tabs.iter().enumerate().filter(|(i, _)| all || *i == active) {
             index.push(i);
             let label = format!(" {} ", if short { small } else { full.as_str() });
-            items.push(if i == active { (label, accent, BLACK, true) } else { (label, RIB, TXT, false) });
+            items.push(if i == active { (label, accent, on_accent(), true) } else { (label, rib(), txt(), false) });
         }
         let (mut s, mut col, mut last) = (String::new(), 1usize, None::<Rgb>);
         let mut spans = Vec::new();
@@ -163,7 +219,7 @@ pub fn tab_bar(w: usize, tabs: &[(String, &str)], active: usize, accent: Rgb) ->
             col += width(t);
             last = Some(*bg);
         }
-        s += &format!("{}{}{sep}", bgc(BAR), fgc(last.unwrap_or(BAR)));
+        s += &format!("{}{}{sep}", bgc(bar()), fgc(last.unwrap_or(bar())));
         (s, col, spans)
     };
     let mut b = build(false, true, true);
@@ -172,23 +228,25 @@ pub fn tab_bar(w: usize, tabs: &[(String, &str)], active: usize, accent: Rgb) ->
             b = build(short, brand, all);
         }
     }
-    (format!("{}{}{}{RESET}", b.0, bgc(BAR), spaces(w.saturating_sub(b.1))), b.2)
+    (format!("{}{}{}{RESET}", b.0, bgc(bar()), spaces(w.saturating_sub(b.1))), b.2)
 }
 
 // Pane frame (inner rows must already be exactly w-2 visible columns). Title sits in the top border.
 pub fn frame(title: &str, tcol: Rgb, inner: &[String], w: usize, color: Rgb) -> Vec<String> {
     let t = cut(title, w.saturating_sub(5));
     let b = |s: String| fg(color, &s);
-    let [tl, tr, bl, br, h, v] = border();
+    let x = border();
+    let [tl, tr, bl, br] = x.corners;
+    let tw = width(&t);
     let top = format!(
         "{}{}\x1b[1m{t}\x1b[22m\x1b[39m{}",
-        b(format!("{tl}{h} ")),
+        b(format!("{tl}{} ", Border::edge(x.top, 0, 1))),
         fgc(tcol),
-        b(format!(" {}{tr}", h.repeat(w.saturating_sub(5 + width(&t)))))
+        b(format!(" {}{tr}", Border::edge(x.top, 3 + tw, w.saturating_sub(5 + tw))))
     );
     let mut out = vec![top];
-    out.extend(inner.iter().map(|l| format!("{}{l}{}", b(v.into()), b(v.into()))));
-    out.push(b(format!("{bl}{}{br}", h.repeat(w.saturating_sub(2)))));
+    out.extend(inner.iter().enumerate().map(|(row, l)| format!("{}{l}{}", b(Border::side(x.left, row).into()), b(Border::side(x.right, row).into()))));
+    out.push(b(format!("{bl}{}{br}", Border::edge(x.bottom, 0, w.saturating_sub(2)))));
     out
 }
 
@@ -208,6 +266,12 @@ pub fn hints(list: &[(&str, &str)], w: usize, accent: Rgb) -> String {
 
 // Spectrum in braille, bass on the left: h rows by exactly w columns, one thin line per column (4 dots of height per
 // row). bands are 0..1; columns in between are interpolated.
+// A paler (on a light background, darker) shade of a color, `t` of the way to white (or black).
+pub fn tint(c: Rgb, t: f64) -> Rgb {
+    let to = strong();
+    std::array::from_fn(|i| (c[i] as f64 + (to[i] as f64 - c[i] as f64) * t).round() as u8)
+}
+
 // The player's visualizer: one column per terminal column, `h` rows. Styles (Config): 0 dots that rise from the
 // bottom, 1 solid bars in eighth blocks, 2 a line of single dots at each level, 3 a mirror growing up and down from the
 // middle. Dots use the left braille column only, which leaves a thin gap between columns.
@@ -254,7 +318,7 @@ pub fn spectrum(bands: &[f64], w: usize, h: usize, accent: Rgb, style: usize) ->
             // paler towards the top, or towards the edges for the mirror
             let t = if h < 2 { 0.0 } else if style == 3 { (row as f64 - (h - 1) as f64 / 2.0).abs() / ((h - 1) as f64 / 2.0) } else { 1.0 - row as f64 / (h - 1) as f64 };
             let light = 0.6 * t;
-            fg(accent.map(|c| (c as f64 + (255.0 - c as f64) * light).round() as u8), &s)
+            fg(tint(accent, light), &s)
         })
         .collect()
 }
@@ -272,13 +336,13 @@ pub fn search_bar(w: usize, title: &str, typing: bool, text: &str, placeholder: 
         format!("\x1b[2m{shown}\x1b[22m{}", spaces(field_w.saturating_sub(width(&shown))))
     };
     if boxed {
-        let color = if typing { accent } else { GRAY };
-        return frame(title, if typing { accent } else { TXT }, &[format!(" {field} ")], w, color);
+        let color = if typing { accent } else { gray() };
+        return frame(title, if typing { accent } else { txt() }, &[format!(" {field} ")], w, color);
     }
     let lab = if typing {
-        format!("{}{}\x1b[1m{label}\x1b[22m{RESET}", bgc(accent), fgc(BLACK))
+        format!("{}{}\x1b[1m{label}\x1b[22m{RESET}", bgc(accent), fgc(on_accent()))
     } else {
-        format!("{}{}{label}{RESET}", bgc(RIB), fgc(TXT))
+        format!("{}{}{label}{RESET}", bgc(rib()), fgc(txt()))
     };
     vec![format!("{lab} {field}")]
 }
@@ -286,6 +350,19 @@ pub fn search_bar(w: usize, title: &str, typing: bool, text: &str, placeholder: 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn every_border_style_keeps_the_width() {
+        for style in 0..BORDERS.len() {
+            set_border(style);
+            let rows = frame("Title", [255; 3], &[spaces(20), spaces(20), spaces(20)], 22, [255; 3]);
+            assert!(rows.iter().all(|r| width(&visible(r)) == 22), "style {style}: {:?}", rows.iter().map(|r| visible(r)).collect::<Vec<_>>());
+        }
+        set_border(9); // ornate
+        let rows: Vec<String> = frame("Hi", [255; 3], &[spaces(10), spaces(10)], 12, [255; 3]).iter().map(|r| visible(r)).collect();
+        assert_eq!(rows, ["@- Hi ~-~=*@", "{          }", "}          {", "@-~=*=~-~=*@"]);
+        set_border(0);
+    }
 
     #[test]
     fn visualizer_styles() {

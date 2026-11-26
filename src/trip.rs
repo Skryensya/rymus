@@ -17,9 +17,6 @@ fn avg(a: &[f64]) -> f64 {
 fn sat(v: f64) -> f64 {
     v.clamp(0.0, 1.0)
 }
-fn fract(x: f64) -> f64 {
-    x - x.floor()
-}
 fn hash(s: &str) -> u32 {
     s.chars().fold(7u32, |h, c| h.wrapping_mul(31).wrapping_add(c as u32))
 }
@@ -34,8 +31,16 @@ fn along(pal: &[Rgb], g: f64) -> [f64; 3] {
 }
 
 // Smooth 3D value noise, 0..1, and its sum over octaves. 3D: two dimensions wrap around the tunnel, one goes along it.
+// An integer hash of the lattice point: the classic sin() hash cost the whole scene most of its time.
 fn rnd(i: f64, j: f64, k: f64, seed: f64) -> f64 {
-    fract((i * 127.1 + j * 311.7 + k * 74.7 + seed * 13.3).sin() * 43758.5453)
+    let mut h = (i as i64 as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15)
+        ^ (j as i64 as u64).wrapping_mul(0xC2B2_AE3D_27D4_EB4F)
+        ^ (k as i64 as u64).wrapping_mul(0x1656_67B1_9E37_79F9)
+        ^ (seed as i64 as u64).wrapping_mul(0x27D4_EB2F_1656_67C5);
+    h ^= h >> 31;
+    h = h.wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    h ^= h >> 29;
+    (h >> 11) as f64 / (1u64 << 53) as f64
 }
 fn smoothstep(f: f64) -> f64 {
     f * f * (3.0 - 2.0 * f)

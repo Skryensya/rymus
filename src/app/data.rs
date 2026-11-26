@@ -1,5 +1,6 @@
 // Your data as a whole (Config > Data): export it, import it back, or wipe it out. An export is a folder of CSV files,
 // one per table, that any spreadsheet opens; importing one replaces everything with what it holds.
+use crate::i18n::tr;
 use super::*;
 use std::path::Path;
 
@@ -7,11 +8,8 @@ use std::path::Path;
 pub const WIPE_WORD: &str = "delete all my data";
 
 // "~/x" means the home folder.
-fn expand(path: &str) -> PathBuf {
-    match path.strip_prefix("~/") {
-        Some(rest) => crate::platform::home_dir().join(rest),
-        None => PathBuf::from(path),
-    }
+pub(super) fn expand(path: &str) -> PathBuf {
+    crate::platform::expand(path)
 }
 
 impl App {
@@ -31,8 +29,8 @@ impl App {
     pub(super) fn export_data(&mut self, to: &str) {
         let path = expand(to);
         match self.db.export_csv(&path) {
-            Ok(()) => self.set_note(format!("Exported to {to}")),
-            Err(e) => self.msg = format!("Could not export: {e}"),
+            Ok(()) => self.set_note(tr!("Exported to {to}", to = to)),
+            Err(e) => self.msg = tr!("Could not export: {e}", e = e),
         }
     }
 
@@ -42,21 +40,21 @@ impl App {
         let staged = self.db_path.with_extension("importing");
         if let Err(e) = crate::db::Db::import_csv(&source, &staged) {
             let _ = std::fs::remove_file(&staged);
-            self.msg = format!("Not a rymus export: {e}");
+            self.msg = tr!("Not a rymus export: {e}", e = e);
             return;
         }
         self.replace_db(Some(&staged));
-        self.set_note(format!("Imported {from}"));
+        self.set_note(tr!("Imported {from}", from = from));
     }
 
     // Only the exact word wipes; anything else (or Esc) leaves everything as it was.
-    pub(super) fn wipe_data(&mut self, typed: &str) {
+    pub(crate) fn wipe_data(&mut self, typed: &str) {
         if typed.to_lowercase() != WIPE_WORD {
-            self.set_note(format!("Nothing deleted: type \"{WIPE_WORD}\" to wipe your data"));
+            self.set_note(tr!("Nothing was deleted: type \"{wipe_word}\" to delete all your data", wipe_word = WIPE_WORD));
             return;
         }
         self.replace_db(None);
-        self.set_note("All your data was deleted".into());
+        self.set_note(tr!("All your data was deleted · rymus starts fresh").into());
     }
 
     // Closes the database, deletes its files, puts `with` in its place (or nothing) and opens it again: an empty one
@@ -72,10 +70,13 @@ impl App {
         match crate::db::Db::open(&self.db_path) {
             Ok(db) => self.db = db,
             Err(e) => {
-                self.msg = format!("Could not open the database: {e}");
+                self.msg = tr!("Could not open the database: {e}", e = e);
                 return;
             }
         }
+        // the song playing was being counted in the old database: from here it counts in this one, from zero
+        self.heard = 0.0;
+        self.play_id = self.sounding.as_ref().map(|t| self.db.start_play(t, crate::db::now_ms()));
         self.likes = self.db.liked_ids();
         self.dislikes = self.db.disliked_ids();
         self.session = load_session(&self.db);

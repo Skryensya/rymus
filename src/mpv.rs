@@ -4,12 +4,12 @@ use crate::platform::{self, Input, Output};
 use serde_json::Value;
 use std::io::Write;
 use std::process::{Child, Command, Stdio};
-use std::time::Duration;
 
 pub struct Mpv {
     child: Option<Child>, // None: started by an earlier run
     writer: Option<Output>,
     reader: Option<Input>, // handed out by connect()
+    pending: Vec<u8>,      // commands given before the player was listening, sent once it is
     pub path: String,
     pub viz: String, // the named pipe the visualizer's filter writes to
 }
@@ -31,7 +31,7 @@ impl Mpv {
         cmd.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
         platform::detached(&mut cmd);
         let child = cmd.spawn()?;
-        Ok((Mpv { child: Some(child), writer: None, reader: None, path, viz }, measurements))
+        Ok((Mpv { child: Some(child), writer: None, reader: None, path, viz, pending: vec![] }, measurements))
     }
 
     // The crossfade's other half: a short-lived mpv that waits, paused on `from`, to play the end of a song fading out
@@ -39,13 +39,14 @@ impl Mpv {
     // it goes when rymus does.
     pub fn tail(url: &str, format: &str, from: f64, secs: f64, volume: i64, filters: &str) -> std::io::Result<Mpv> {
         if cfg!(test) {
-            return Ok(Mpv { child: None, writer: Some(Box::new(std::io::sink())), reader: None, path: String::new(), viz: String::new() });
+            return Ok(Mpv { child: None, writer: Some(Box::new(std::io::sink())), reader: None, path: String::new(), viz: String::new(), pending: vec![] });
         }
         static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
         let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed); // one waits while the last one still plays
         let path = platform::player_paths().0.replace(".sock", &format!("-tail{n}.sock"));
         let mut cmd = Command::new("mpv");
-        cmd.args(["--pause", "--no-video", "--no-terminal", "--hr-seek=yes"])
+        // the media keys and the system's Now Playing stay with the main player, not with this end fading out
+        cmd.args(["--pause", "--no-video", "--no-terminal", "--hr-seek=yes", "--media-controls=no", "--input-media-keys=no"])
             .arg(format!("--input-ipc-server={path}"))
             .arg(format!("--ytdl-format={format}"))
             .arg(format!("--start={from:.2}"))
@@ -57,13 +58,16 @@ impl Mpv {
         }
         cmd.arg(url).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
         let child = cmd.spawn()?;
-        Ok(Mpv { child: Some(child), writer: None, reader: None, path, viz: String::new() })
+        Ok(Mpv { child: Some(child), writer: None, reader: None, path, viz: String::new(), pending: vec![] })
     }
 
     // Connects without waiting: false when the player is not listening (yet, or any more).
     pub fn try_connect(&mut self) -> bool {
         if self.writer.is_none() {
-            self.writer = platform::connect(&self.path).ok().map(|(_, writer)| writer);
+            self.writer = platform::connect(&self.path).ok().map(|(_, mut writer)| {
+                let _ = writer.write_all(&std::mem::take(&mut self.pending));
+                writer
+            });
         }
         self.writer.is_some()
     }
@@ -75,7 +79,7 @@ impl Mpv {
         }
         let (reader, writer) = platform::connect(path).ok()?;
         let measurements = platform::open_viz(viz).ok()?;
-        Some((Mpv { child: None, writer: Some(writer), reader: Some(reader), path: path.into(), viz: viz.into() }, measurements))
+        Some((Mpv { child: None, writer: Some(writer), reader: Some(reader), path: path.into(), viz: viz.into(), pending: vec![] }, measurements))
     }
 
     // For tests: no mpv at all, the commands are collected in the returned buffer.
@@ -92,32 +96,30 @@ impl Mpv {
             }
         }
         let told = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
-        (Mpv { child: None, writer: Some(Box::new(Record(told.clone()))), reader: None, path: String::new(), viz: String::new() }, told)
+        (Mpv { child: None, writer: Some(Box::new(Record(told.clone()))), reader: None, path: String::new(), viz: String::new(), pending: vec![] }, told)
     }
 
     // What mpv says; waits for it to start when it was just spawned.
-    pub fn connect(&mut self) -> std::io::Result<Input> {
+    // One try at reaching the player, for a caller that keeps going meanwhile: its events once it listens. What was
+    // told to it before goes first.
+    pub fn connect_now(&mut self) -> Option<Input> {
         if let Some(reader) = self.reader.take() {
-            return Ok(reader);
+            return Some(reader);
         }
-        let mut last = None;
-        for _ in 0..100 {
-            match platform::connect(&self.path) {
-                Ok((reader, writer)) => {
-                    self.writer = Some(writer);
-                    return Ok(reader);
-                }
-                Err(e) => last = Some(e),
-            }
-            std::thread::sleep(Duration::from_millis(50));
-        }
-        Err(last.unwrap_or_else(|| std::io::Error::other("mpv did not start")))
+        let (reader, mut writer) = platform::connect(&self.path).ok()?;
+        let _ = writer.write_all(&std::mem::take(&mut self.pending));
+        self.writer = Some(writer);
+        Some(reader)
     }
 
     pub fn cmd(&mut self, command: Value) {
-        if let Some(w) = &mut self.writer {
+        let line = format!("{}\n", serde_json::json!({ "command": command }));
+        match &mut self.writer {
             // one write, so a line is never split on the way
-            let _ = w.write_all(format!("{}\n", serde_json::json!({ "command": command })).as_bytes());
+            Some(w) => {
+                let _ = w.write_all(line.as_bytes());
+            }
+            None => self.pending.extend_from_slice(line.as_bytes()),
         }
     }
 

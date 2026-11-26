@@ -1,4 +1,5 @@
 // The radio: similar songs that keep the queue going when it runs out.
+use crate::i18n::tr;
 use super::*;
 
 impl App {
@@ -19,7 +20,7 @@ impl App {
                 app.filling = None;
                 match found {
                     Ok(found) => app.append_similar(found),
-                    Err(e) => app.msg = format!("No similar songs: {e}"),
+                    Err(e) => app.msg = tr!("No similar songs: {e}", e = e),
                 }
             })));
         });
@@ -28,7 +29,8 @@ impl App {
         let unwanted: HashSet<String> = self.dislikes.union(&self.removed).cloned().collect();
         for mut t in fresh_songs(&self.queue, found, &unwanted).into_iter().take(25) {
             t.uid = self.id();
-            self.cmd(json!(["loadfile", track_url(&t), "append-play"]));
+            let url = self.source(&t);
+            self.cmd(json!(["loadfile", url, "append-play"]));
             self.queue.push(t);
         }
         self.preload();
@@ -53,7 +55,8 @@ impl App {
     pub(super) fn remove_from_queue(&mut self, uid: u64) {
         let Some(idx) = self.queue.iter().position(|t| t.uid == uid) else { return };
         let gone = self.queue.remove(idx);
-        self.removed.insert(gone.id);
+        self.removed.insert(gone.id.clone());
+        self.remember(Undo::Queue(vec![(idx, gone)]));
         if (idx as i64) < self.pos {
             self.pos -= 1;
         }

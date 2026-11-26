@@ -1,14 +1,16 @@
 // The lyrics view (y) and karaoke (Y).
+use crate::i18n::tr;
 use super::*;
+use crate::bigtext::Style;
 
 impl App {
-    // Karaoke: the line being sung in big braille letters, the one before and the one after small around it.
+    // Karaoke: the line being sung in big letters, the one before and the one after small around it.
     #[allow(clippy::too_many_arguments)]
     // Under it, 4 dots fill up on the way to the next line (see lyrics::dots_filled). All of it is centred on the same
     // middle column.
     pub(super) fn karaoke_rows(&self, lines: &[String], current: Option<usize>, synced: bool, dots: Option<usize>, w: usize, l: usize, a: Rgb, center: impl Fn(&str, String) -> String) -> Vec<String> {
         if !synced {
-            let text = cut("Karaoke needs synced lyrics · y shows the words", w);
+            let text = cut(tr!("Karaoke needs synced lyrics · y shows the words"), w);
             return (0..l).map(|i| if i == l / 2 { center(&text, dim(&text)) } else { spaces(w) }).collect();
         }
         // 5 columns of margin on each side (1 on a very narrow screen), so the words never touch the frame
@@ -27,9 +29,11 @@ impl App {
         let room = body.saturating_sub(before.len() + after.len() + 2); // a blank row on each side of the big line
         // drawn inside the margins, then given them back on each side: centred like everything else
         let side = spaces(margin);
-        let big = crate::bigtext::render(&sung, tw)
+        // the style you chose; the compact dots when it does not fit, plain text when even those do not
+        let big = [self.karaoke_style, Style::Dots]
+            .into_iter()
+            .find_map(|s| crate::bigtext::render(&sung, tw, s).filter(|r| r.len() <= room))
             .map(|rows| rows.into_iter().map(|r| format!("{side}{r}{side}")).collect::<Vec<_>>())
-            .filter(|r| r.len() <= room)
             .unwrap_or_else(|| lyrics::wrap(&sung, tw).into_iter().map(|t| center(&t, t.clone())).collect());
         let mut rows: Vec<String> = before.iter().map(|t| center(t, dim(t))).collect();
         rows.push(spaces(w));
@@ -64,15 +68,15 @@ impl App {
         };
         let ready = self.want_lyrics().is_some();
         let message = if self.now().is_none() {
-            "Nothing playing".to_string()
+            tr!("Nothing playing").to_string()
         } else {
             match self.lyrics_ready().filter(|_| ready) {
-                None => format!("{} Looking for lyrics…", spin()),
-                Some(Lyrics::Error) => "Could not reach LRCLIB. Press y twice to retry.".into(),
-                Some(Lyrics::Instrumental) => "♪ Instrumental ♪".into(),
+                None => tr!("{a} Looking for lyrics…", a = spin()),
+                Some(Lyrics::Error) => tr!("Could not reach LRCLIB. Press y twice to retry.").into(),
+                Some(Lyrics::Instrumental) => tr!("♪ Instrumental ♪").into(),
                 Some(Lyrics::Synced(v)) if !v.is_empty() => String::new(),
                 Some(Lyrics::Plain(_)) => String::new(),
-                _ => "No lyrics found on LRCLIB.".into(),
+                _ => tr!("No lyrics found on LRCLIB.").into(),
             }
         };
         if !message.is_empty() {

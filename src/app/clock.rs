@@ -14,6 +14,7 @@ impl App {
             need = true;
         }
         need |= self.theme.step();
+        need |= self.sleep_tick();
         if self.redraw_at.is_some_and(|t| now >= t) {
             self.redraw_at = None;
             need = true;

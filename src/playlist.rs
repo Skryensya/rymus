@@ -1,5 +1,6 @@
 // Importing a playlist from a pasted link, without any account. YouTube Music playlists are read as they are;
 // Spotify's public embed page gives names only, so each song is looked up on YouTube Music.
+use crate::i18n::tr;
 use crate::item::{clean, Item};
 use crate::yt::{agent, Yt};
 use serde_json::Value;
@@ -166,13 +167,13 @@ pub fn fetch(yt: &Yt, link: &Link, progress: &(dyn Fn(usize, usize) + Sync)) -> 
                 .map_err(|e| e.to_string())?
                 .into_string()
                 .map_err(|e| e.to_string())?;
-            let (name, wanted) = spotify_page(&html).ok_or("Spotify did not show this playlist (is it public?)")?;
+            let (name, wanted) = spotify_page(&html).ok_or(tr!("Spotify did not show this playlist (is it public?)"))?;
             let tracks = find_all(yt, &wanted, progress)?;
             Imported { name, missing: wanted.len() - tracks.len(), partial: wanted.len() >= SPOTIFY_MOST, tracks }
         }
     };
     if imported.tracks.is_empty() {
-        return Err("no songs found (is the playlist public?)".into());
+        return Err(tr!("no songs found (is the playlist public?)").into());
     }
     Ok(imported)
 }

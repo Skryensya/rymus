@@ -1,4 +1,5 @@
 // Your playlists: making, filling, renaming, deleting and importing them.
+use crate::i18n::tr;
 use super::*;
 
 impl App {
@@ -25,15 +26,15 @@ impl App {
     }
     pub(super) fn pick_playlist(&mut self, tracks: Vec<Item>) {
         let Some(first) = tracks.first() else { return };
-        let title = if tracks.len() == 1 { first.title.clone() } else { format!("{} songs", tracks.len()) };
+        let title = if tracks.len() == 1 { first.title.clone() } else { tr!("{a} songs", a = tracks.len()) };
         let mut items: Vec<(String, Action)> = self
             .db
             .playlists()
             .into_iter()
             .filter_map(|p| Some((p.title.clone(), Action::AddTo(p.id.parse().ok()?, p.title, tracks.clone()))))
             .collect();
-        items.push(("+ New playlist…".into(), Action::NewPlaylist(tracks)));
-        self.menu = Some(Menu { title: format!("add to playlist · {title}"), items, sel: 0 });
+        items.push((tr!("+ New playlist…").into(), Action::NewPlaylist(tracks)));
+        self.menu = Some(Menu { title: tr!("add to playlist · {title}", title = title), items, sel: 0 });
     }
     pub(super) fn start_naming(&mut self, naming: Naming, current: String) {
         self.start_typing();
@@ -45,17 +46,25 @@ impl App {
             return;
         }
         match naming {
+            Naming::Filter => {} // applied as it is typed
+            Naming::FreeCut => return self.free_cut(&name),
+            Naming::Folder => {
+                self.db.set_setting("dlfolder", &name);
+                self.settings = config::rows(&self.db);
+                self.scan_library();
+                self.set_note(tr!("Downloads go to {name} from now on", name = name));
+            }
             Naming::New(tracks) => match self.db.create_playlist(&name, None, &tracks) {
                 Some(id) => {
                     if let [t] = tracks.as_slice() {
                         self.hook("playlist-add", t, json!({"playlist": name}));
                     }
-                    self.set_note(format!("Created {name}"));
+                    self.set_note(tr!("Created {name}", name = name));
                     self.playlists_changed();
                     self.point_at_playlist(id); // leave the cursor on what was just made
                     return;
                 }
-                None => self.msg = "Could not save the playlist".into(),
+                None => self.msg = tr!("Could not save the playlist").into(),
             },
             Naming::EqPreset => return self.new_eq(name),
             Naming::Export => return self.export_data(&name),
@@ -80,19 +89,19 @@ impl App {
     pub(super) fn import(&mut self, link: Link) {
         let source = link.url();
         if let Some((id, name)) = self.db.playlist_from(&source) {
-            self.set_note(format!("Already imported: {name}"));
+            self.set_note(tr!("Already imported: {name}", name = name));
             return self.show_saved(id, name);
         }
         if self.importing {
-            return self.set_note("Wait for the current import to finish".into());
+            return self.set_note(tr!("Wait for the current import to finish").into());
         }
         self.importing = true;
-        self.busy = "Importing playlist…".into();
+        self.busy = tr!("Importing playlist…").into();
         self.msg.clear();
         let (yt, tx) = (self.yt.clone(), self.tx.clone());
         std::thread::spawn(move || {
             let progress = |done: usize, total: usize| {
-                let _ = tx.send(Msg::Apply(Box::new(move |app: &mut App| app.busy = format!("Importing playlist… {done}/{total}"))));
+                let _ = tx.send(Msg::Apply(Box::new(move |app: &mut App| app.busy = tr!("Importing playlist… {done}/{total}", done = done, total = total))));
             };
             let result = playlist::fetch(&yt, &link, &progress);
             let _ = tx.send(Msg::Apply(Box::new(move |app: &mut App| {
@@ -100,27 +109,27 @@ impl App {
                 app.busy.clear();
                 match result {
                     Ok(got) => app.imported(got, &source),
-                    Err(e) => app.msg = format!("Import failed: {e}"),
+                    Err(e) => app.msg = tr!("Import failed: {e}", e = e),
                 }
             })));
         });
     }
     pub(super) fn imported(&mut self, got: playlist::Imported, source: &str) {
-        let name = if got.name.is_empty() { "Imported playlist".to_string() } else { got.name };
+        let name = if got.name.is_empty() { tr!("Imported playlist").to_string() } else { got.name };
         let Some(id) = self.db.create_playlist(&name, Some(source), &got.tracks) else {
-            self.msg = "Could not save the playlist".into();
+            self.msg = tr!("Could not save the playlist").into();
             return;
         };
         self.playlists_changed();
         if !self.typing {
             self.show_saved(id, name); // never pull someone out of what they are typing
         }
-        let mut note = format!("Imported {} songs", got.tracks.len());
+        let mut note = tr!("Imported {a} songs", a = got.tracks.len());
         if got.missing > 0 {
-            note += &format!(" · {} not found", got.missing);
+            note += &tr!(" · {a} not found", a = got.missing);
         }
         if got.partial {
-            note += &format!(" · only the first {}", got.tracks.len() + got.missing);
+            note += &tr!(" · only the first {a}", a = got.tracks.len() + got.missing);
         }
         self.set_note(note);
         self.note_until = Some(Instant::now() + Duration::from_secs(10));

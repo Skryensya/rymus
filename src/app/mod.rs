@@ -1,6 +1,7 @@
 // Application state (the App struct) and the small types around it. What App does is split by topic into the files
 // next to this one; drawing is in render/. One thread owns the state; slow work runs on its own thread and answers
 // with a message (Msg).
+use crate::i18n::tr;
 use crate::cover::{self, Got};
 use crate::charts;
 use crate::config;
@@ -35,11 +36,23 @@ mod clock;
 mod input;
 mod equalizer;
 mod data;
+mod albums;
+mod search;
+mod extras;
+mod filter;
+mod library;
+pub(crate) mod downloads;
+pub use downloads::Downloads;
+pub use filter::Filter;
+pub use extras::{Sleep, Undo};
+pub use search::{Found, KINDS};
 pub use equalizer::EqView;
+#[cfg(test)]
+pub use data::WIPE_WORD;
 
 pub const CATS: [&str; 3] = ["songs", "artists", "albums"];
 pub const PERIODS: [(&str, i64); 3] = [("week", 7), ("month", 30), ("year", 365)]; // rolling windows ending now
-pub const TABS: [Tab; 7] = [Tab::Home, Tab::Playlists, Tab::Liked, Tab::Queue, Tab::Stats, Tab::Config, Tab::Eq];
+pub const TABS: [Tab; 8] = [Tab::Home, Tab::Playlists, Tab::Liked, Tab::Library, Tab::Queue, Tab::History, Tab::Stats, Tab::Config];
 const WHEEL: Duration = Duration::from_millis(40);
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -47,10 +60,11 @@ pub enum Tab {
     Home,
     Playlists,
     Liked,
+    Library,
     Queue,
+    History,
     Stats,
     Config,
-    Eq,
     Search,
 }
 
@@ -82,6 +96,9 @@ pub enum Action {
     PlayNext(Item),
     Enqueue(Item),
     Rate(bool, Item),
+    LikeAlbum(Item),
+    SearchTab(usize),
+    UnlikeAlbum(String, Vec<Item>), // its title and songs
     Remove(u64),
     Radio(Item),
     OpenPlaylist(i64, String),
@@ -95,6 +112,25 @@ pub enum Action {
     RemoveEntry(u64),
     Nothing,
     DeleteEq(String),
+    ResetEq(String),
+    OpenEq,
+    Sleep(Option<Sleep>),
+    Press(char),
+    Choose(String, &'static str), // a setting's choice, clicked
+    GoTab(Tab),
+    Unfollow(String),
+    DropAlbum(String),
+    DropRelease(String),
+    Download(Vec<Item>),
+    AskDeleteDownload(Item),
+    DeleteDownload(String),
+    FreeSpace(Vec<String>),
+    OpenDownloads,
+    PickDownloads(usize),
+    DownloadLiked,
+    DownloadFolder,
+    ClearQueue(bool), // all but what plays, or only the radio's songs
+    PickEq(usize),
     ThisIs(Item),
     Search(String),
 }
@@ -104,6 +140,9 @@ pub enum Naming {
     New(Vec<Item>),
     Rename(i64),
     EqPreset,
+    Filter,
+    Folder, // where downloads go
+    FreeCut, // the share of downloads Free up space deletes
     Export, // the file to write a copy of your data to
     Import, // the file to read your data back from
     Wipe,   // the word that confirms deleting everything
@@ -155,7 +194,9 @@ pub struct Geo {
     pub thumb: Option<(usize, usize, usize, usize)>,
     pub controls: Vec<(Control, usize, usize, usize, usize)>, // the player's buttons: (which, x0, x1, y0, y1), boxes included
     pub panes: Vec<Pane>,
+    pub links: Vec<(Action, usize, usize, usize)>, // names in the players that open their page: (it, x0, x1, y)
     pub body: usize,
+    pub window: Option<(usize, usize, usize, usize)>, // the equalizer's window: (x0, x1, y0, y1)
 }
 
 // The player's buttons.
@@ -240,9 +281,9 @@ pub fn fmt(seconds: f64) -> String {
 }
 pub fn minutes(s: i64) -> String {
     if s > 0 && s < 60 {
-        "<1 min".into()
+        tr!("<1 min").into()
     } else {
-        format!("{} min", (s as f64 / 60.0).round())
+        tr!("{a} min", a = (s as f64 / 60.0).round())
     }
 }
 
@@ -342,6 +383,7 @@ pub struct App {
     pub karaoke: bool,                    // the lyrics as karaoke: the line being sung big, the ones around it small
     pub lyric_scrolled: Option<Instant>,  // when you last scrolled synced lyrics: they follow the song again 4 s later
     pub lyric_line: Option<usize>,
+    pub karaoke_style: crate::bigtext::Style, // its big letters (f while it is open)
     pub lyric_dots: Option<usize>, // karaoke's countdown dots filled on screen (to know when to draw again)
 
     // results view: current list and the stack of lists to go back to
@@ -363,6 +405,7 @@ pub struct App {
     pub home_sel: [usize; 2],
 
     pub liked: Vec<Item>,
+    pub liked_by_album: bool, // the Liked tab grouped by album (← →)
     pub sel: usize,
     search_sel: usize,
 
@@ -394,6 +437,15 @@ pub struct App {
     filling: Option<u64>, // the generation similar songs are being fetched for
     removed: HashSet<String>, // taken out of this queue: the radio does not bring them back
     result_lists: HashSet<u64>, // list_id of search results: playing there starts a radio
+    found: Option<Found>,       // the last search, by tab
+    sleep: Option<Sleep>,       // the sleep timer (z)
+    undo: Vec<Undo>,            // what u takes back
+    pub filter: Option<Filter>, // f: the list narrowed
+    palette: Option<String>,    // : what has been typed to find a command
+    pub played: Vec<Item>,      // the History tab
+    pub library: Vec<Item>,     // the Library tab
+    pub releases: usize,        // new releases not opened yet
+    pub downloads: Downloads,   // songs kept as files
     pub time: i64,
     pub dur: f64,
     pub vol: i64,
@@ -451,17 +503,19 @@ impl App {
         let likes = db.liked_ids();
         let dislikes = db.disliked_ids();
         let wave = db.get_setting("wave").as_deref() != Some("off");
+        let liked_by_album = db.get_setting("liked_view").as_deref() == Some("albums");
         let trip_lyrics = db.get_setting("trip_lyrics").as_deref() == Some("on");
+        let karaoke_style = db.get_setting("karaoke_style").and_then(|v| crate::bigtext::STYLES.iter().find(|s| s.1 == v)).map_or(crate::bigtext::Style::Dots, |s| s.0);
         App {
             db, db_path, yt: Yt::new(), tx, mpv, feed, quit: false, clear_screen: false,
             tab: Tab::Home, prev_tab: Tab::Home, typing: false, buf: String::new(), history_at: None, history: vec![], draft: String::new(),
             msg: String::new(), note: String::new(), note_until: None, busy: String::new(), help: false, eq: EqView::default(), detach: false, restart: false, help_scroll: 0, full: false, menu: None,
-            lyrics: false, lyric_scroll: 0, karaoke: false, lyric_scrolled: None, lyric_line: None, lyric_dots: None,
+            lyrics: false, lyric_scroll: 0, karaoke: false, lyric_scrolled: None, lyric_line: None, lyric_dots: None, karaoke_style,
             items: vec![], title: String::new(), numbered: false, back: vec![], head: None, query: String::new(), list_id: 0, next_id: 1,
             home_left: vec![], home_right: vec![], home_titles: Default::default(), home_wide: true, home_focus: PaneId::Left, home_sel: [0, 0],
-            liked: vec![], sel: 0, search_sel: 0,
+            liked: vec![], liked_by_album, sel: 0, search_sel: 0,
             stat_rows: vec![], timeline: Default::default(), hours: vec![], totals: [0; 3], stat_cat: 0, period: 0, stats_at: now, heard: 0.0, raw_pos: None, play_dur: 0.0,
-            endless: false, generation: 0, filling: None, removed: HashSet::new(), result_lists: HashSet::new(),
+            endless: false, generation: 0, filling: None, removed: HashSet::new(), result_lists: HashSet::new(), found: None, sleep: None, undo: vec![], filter: None, palette: None, played: vec![], library: vec![], releases: 0, downloads: Downloads::default(),
             naming: None, playlists: vec![], playlists_sel: 0, playlist_views: HashMap::new(), importing: false,
             queue: vec![], pos: -1, paused: false, sounding: None, repeat: Repeat::Off, loading: false, time: 0, dur: 0.0, vol, play_id: None,
             direct: HashSet::new(), streams: HashMap::new(), resolving: HashSet::new(), session, likes, dislikes,
@@ -482,7 +536,10 @@ impl App {
             self.apply_setting(s.key, v);
         }
         self.start_eq();
+        self.load_downloads(); // your own music is read by apply_setting("library") above
         self.load_home();
+        self.load_library();
+        self.check_releases(false);
     }
 
     fn id(&mut self) -> u64 {

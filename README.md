@@ -9,7 +9,7 @@
 - **Nothing to sign in to.** It uses YouTube Music anonymously. Your likes, playlists and history live in one file on your computer; the services it talks to get only what each request needs (see [Your data](#your-data)).
 - **Light.** A single small binary drawing text, with `mpv` playing the music. No browser, no Electron, no ads, no video eating your battery.
 - **Made for the keyboard.** Every action is one key away, and the bar at the bottom always says which keys work right now. The mouse works too.
-- **Yours.** A fixed color or the cover's, the player on top or below, four border styles.
+- **Yours.** Dark or light, a fixed color or the cover's, the player on top or below, ten border styles (one ornate, in ASCII).
 - **It looks good in any terminal size.** From a small split pane to a full screen, every view rearranges itself instead of breaking.
 - **It learns from you, and tells you.** Discover and the radio rank new songs by your own listening; Stats shows the minutes, not a mystery score.
 - **More than a player.** Synced lyrics, karaoke, album and artist pages, a This is … playlist for any artist, crossfade, loudness levelling, a spectrum visualizer and a psychedelic one.
@@ -22,7 +22,7 @@ Open an album and its songs are on the left, the cover and details on the right.
 ![An album page with Play album and Shuffle](docs/album.gif)
 
 ### Lyrics and karaoke
-`y` shows the lyrics, highlighting the line being sung; scroll ahead with `↑` `↓` and they come back to the song on their own. `Y` turns them into karaoke: the line being sung in big braille letters, the ones around it small, and four dots that fill up until the next line.
+`y` shows the lyrics, highlighting the line being sung; scroll ahead with `↑` `↓` and they come back to the song on their own. `Y` turns them into karaoke: the line being sung in big letters, the ones around it small, and four dots that fill up until the next line. `f` changes the letters: dots (braille), solid, or big blocks.
 
 ![Lyrics following the song, then karaoke](docs/lyrics.gif)
 
@@ -37,13 +37,17 @@ Crossfade, even out loudness, a data saver, pixel art covers — each changed wi
 ![The Config tab](docs/config.gif)
 
 ### Make it yours
-The color can follow the cover of what plays, or stay the one you pick. The player can sit under the lists or above them, and the frames can be rounded, square, heavy or double. All of it is in Config, under Look, and changes the moment you press `←` `→`.
+There is a light mode for terminals with a light background, where every color is chosen to read on it. The accent can follow the cover of what plays, or be one of 13 fixed colors. The player can sit under the lists or above them, and the frames can be rounded, square, heavy, double, dashed, dotted, deco, block, plain ASCII, or ornate (scrolls along the edges and curls down the sides, in plain ASCII). All of it is in Config, under Look, and changes the moment you press `←` `→`.
 
 ![Changing the color, the player's place and the borders in Config](docs/looks.gif)
 
 | As it comes | Purple, player on top, heavy | White, double lines |
 |---|---|---|
 | ![The cover's color, the player below, rounded frames](docs/look-cover.png) | ![A fixed purple, the player above the lists, heavy frames](docs/look-top.png) | ![A fixed white, double-line frames](docs/look-double.png) |
+
+| Light mode | Light, teal, player on top, square |
+|---|---|
+| ![Light mode on a light terminal](docs/look-light.png) | ![Light mode with a teal accent, the player above, square frames](docs/look-light-teal.png) |
 
 ### Any size
 In a small window Home becomes one column, every list keeps its headings in sight, and nothing spills over the edges.
@@ -81,8 +85,30 @@ Cover images use the kitty graphics protocol (Ghostty, kitty, WezTerm) and fall 
 2. `↑` `↓` to move, `Enter` to play or open. `Esc` goes back.
 3. `Space` pauses, `n` / `p` skip, `+` / `-` change the volume.
 4. `y` shows the lyrics, `Y` turns them into karaoke, `v` shows the big cover.
-5. `Tab` walks through Home, Playlists, Liked, Queue, Stats, Config and EQ.
+5. `Tab` walks through Home, Playlists, Liked, Library, Queue, History, Stats and Config.
 6. `?` lists every key. `q` quits.
+
+## Languages
+
+rymus speaks English and Spanish: **Config → Language** (at the top). `rymus help` and `rymus man` follow the same choice.
+
+To add a language, or change any word:
+
+```sh
+rymus translations > ~/.rymus/translations.csv
+```
+
+Open it in any spreadsheet. Each row is one text: the `english` column says what it is, and every other column is a language. Add a column (`français`, `português`…) and fill in what you want; an empty cell stays in English, and `{name}` is a value rymus puts in, so keep it as it is. Save it as CSV in the same place and restart rymus (`Ctrl R`): the new column shows up in Config → Language. Your file goes on top of the built-in one (`lang/translations.csv`), so you can also correct a Spanish word without touching the rest. When rymus gets new texts, run the command again into another file to see them: rows of yours are kept as long as you keep your file.
+
+## Help and manual
+
+`rymus help` (or `--help`) lists the commands and keys. `rymus man` opens the full manual. To have `man rymus` too:
+
+```sh
+rymus man > "$(brew --prefix)/share/man/man1/rymus.1"   # Linux: ~/.local/share/man/man1/rymus.1
+```
+
+Run it again after updating.
 
 ## Keys
 
@@ -140,12 +166,19 @@ Cover images use the kitty graphics protocol (Ghostty, kitty, WezTerm) and fall 
 | Pixel art covers | draws every cover as coloured blocks, even where the terminal can show the image |
 | Visualizer | the wave in the player (also `w`) |
 | Visualizer style | *dots* rising from the bottom, solid *bars*, a *line* of dots, or a *mirror* growing up and down from the middle |
-| Color | *from cover* takes the accent from what plays; or always green, blue, purple, pink, orange, yellow, red or white |
+| Mode | *dark* or *light*, to match your terminal's background: text, tones and frames change, and a pale accent is darkened to stay readable |
+| Color | *from cover* takes the accent from what plays; or always red, coral, orange, yellow, lime, green, teal, cyan, blue, purple, magenta, pink or white |
 | Player | *bottom* under the lists, or *top* above them (a very short window always keeps it at the bottom) |
-| Borders | rounded, square, heavy or double frames, the player's buttons included |
+| Borders | rounded, square, heavy, double, dashed, dotted, deco, block, ascii, or ornate: `@-~=*=~` scrolls along the edges and `{ }` curls down the sides |
 | Pause on output change | pauses when headphones are unplugged (macOS) |
 
-**Lyrics** come from LRCLIB and are kept on disk, so a song you play again has them at once, even offline. All of them together stay under 10 MB (about 3 000 songs); past that, the ones you used longest ago are dropped. "No lyrics" is asked again after a month, since LRCLIB keeps adding them. With `y` you read and scroll them; synced lyrics highlight the line being sung. With `Y` they become karaoke: the line being sung in big braille letters (accents included), the one before and the one after small, and four dots under it that start empty and fill one by one, in equal steps, so they are all full just before the next line. Lines in scripts the braille font does not have are shown as plain text.
+**Lyrics** come from LRCLIB and are kept on disk, so a song you play again has them at once, even offline. All of them together stay under 10 MB (about 3 000 songs); past that, the ones you used longest ago are dropped. "No lyrics" is asked again after a month, since LRCLIB keeps adding them. With `y` you read and scroll them; synced lyrics highlight the line being sung. With `Y` they become karaoke: the line being sung in big letters (accents included; `f` cycles dots, solid and blocks, remembered, and a line too long for the chosen style is drawn in dots), the one before and the one after small, and four dots under it that start empty and fill one by one, in equal steps, so they are all full just before the next line. Lines in scripts the big font does not have are shown as plain text.
+
+## Media keys
+
+The keyboard's play/pause, next and previous keys, AirPods, and the system's Now Playing work with rymus, through mpv: on macOS out of the box, on Linux once the [mpv-mpris](https://github.com/hoyon/mpv-mpris) plugin is installed. They keep working after `Q`, while the music plays on.
+
+`rymus ctl play-pause`, `next`, `prev`, `volume-up`, `volume-down`, `like` (like what plays, or take the like back) and `status` (one line such as `▶ Title — Artist`, for tmux or a status bar) control the rymus that is playing from outside it: a keyboard shortcut, or buttons of your own on the MacBook's Touch Bar with [MTMR](https://github.com/Toxblh/MTMR) (free) or BetterTouchTool. The system's own Touch Bar play/pause (Now Playing) already works; its volume slider is the system's, so use `volume-up`/`volume-down` for rymus' own. Make each button run the command with its full path, e.g. `/opt/homebrew/bin/rymus ctl play-pause`: those apps do not read your shell's `PATH`.
 
 ## Leaving it playing
 
@@ -153,9 +186,49 @@ Cover images use the kitty graphics protocol (Ghostty, kitty, WezTerm) and fall 
 
 `Ctrl R` (or `Cmd Shift R` in Ghostty and kitty) restarts `rymus` without stopping the music, which is how to pick up a freshly built version.
 
+## Albums you like
+
+`l` on an album (in search results, on an artist's page, or on the Play and Shuffle buttons of the album's page) likes every song of it; songs you disliked are left out. On an album that is already liked, `l` asks before removing those likes. On the **Liked** tab, `← →` switches between your likes by song and grouped by album.
+
+In the player and in lists (search results, Stats, Home, queue and the rest), names are underlined links: an artist or album opens its page with one click. In the player you can also press `o` for the playing song's album and `O` for its artist.
+
+## Finding things
+
+- `f` narrows the list you are on (Liked, Library, queue, history, playlists, pages) as you type; `Enter` keeps it, `Esc` clears it.
+- `:` or `Ctrl K` opens the command palette: type part of a command's name and press `Enter`.
+
+## Library and following
+
+Liking an album also saves it in **Library**, with its cover beside the list. `F` follows an artist (on their row or page): albums they put out from then on show there as **New releases**, checked at most twice a day. `d` removes an album or artist, after asking. Only albums are noticed, not singles.
+
+## Offline
+
+`b` downloads the highlighted song (every song, from an album's Play and Shuffle buttons), or what plays; `m` → *Download* does the same. A downloaded song is marked `↓` and plays from its file, with or without network; `m` → *Delete download* removes it. Downloading needs `yt-dlp` and `ffmpeg`; what you may download and keep is up to you and YouTube's terms.
+
+**The Downloads window** (`B` from anywhere, or *Config → Downloads and your music*) sits over the screen like the equalizer. On top: the folder, the room it takes, how many songs are downloaded (and of your own), and how many are still on their way. Then, changed with `← →`: *Keep offline* (`liked songs` downloads every new like), *File format* (mp3, m4a, opus or original) and *Your own music*. Then, run with `⏎`: *Change folder…* (`~/Music/rymus` unless you choose another), *Download what plays* (also `b` in the window), *Download all liked songs* and *Free up space…*. Files are named `Artist - Title [id].mp3`.
+
+**Your own music.** With *Your own music: on*, rymus reads the same folder (subfolders too): every audio file it did not download (mp3, flac, m4a, opus, ogg, wav…) shows in **Library → Your music** and plays from disk, with the EQ and crossfade. Name files `Artist - Title.flac` and the artist shows; the folder becomes the album.
+
+**Free up space…** asks what share to delete, typed from 1 to 100 % (the last one is offered again), then shows how many songs and how much space go before deleting. The least played of the songs rymus downloaded go first, the oldest first among equals. Your own files are never deleted. Downloading needs `yt-dlp` and `ffmpeg`; what you may download and keep is up to you and YouTube's terms.
+
+## While it plays
+
+- `z` sets a sleep timer: in 15 to 90 minutes, after this song, or when this album ends.
+- `c` on the queue removes the radio's songs, or all but what plays.
+- `u` takes back what you just removed: songs from the queue, a playlist, a song in one, an album's likes.
+- **History** lists what you heard, by day.
+
+## Search
+
+Results come in three tabs, **Songs**, **Albums** and **Artists** (`← →`, or click), and more load as you reach the end of a tab. They are ordered by how well they answer what you typed, not by plays: the title or name you wrote first, then longer ones, with remixes, live versions and covers last unless you ask for them.
+
+## Mono
+
+**Config → Channels** switches between stereo and mono (left and right mixed, the same on both sides), without a gap in the music.
+
 ## Equalizer
 
-The **EQ** tab (`E`, or `Tab` past Config). On the left the profiles (Flat, Bass boost, Vocal, Rock and more): moving through them changes the sound at once, and each one says in words what it does ("More bass and treble"). On the right a slider per band on a ±12 dB scale, with the bass, mids and treble ranges marked under them. `→` or `Enter` goes onto the sliders: `← →` band, `↑ ↓` gain, `0` back to 0 dB, `Esc` back to the profiles; the band you are on says what it moves ("62 Hz · Bass: the weight of the kick drum and the bass guitar"). Moving a slider of a built-in profile saves your change as a copy ("My Rock"), so the built-in ones stay as they are. `n` makes a new profile from what you hear, `d` deletes one of yours. Boosts lower the overall level by as much, so they never distort.
+A window over whatever you are looking at: **Config → Equalizer**, or `E` from anywhere. On the left the built-in profiles (Flat, Bass boost, Vocal, Rock and more) and yours: moving through them changes the sound at once, and each one says in words what it does ("More bass and treble"). On the right a slider per band on a ±12 dB scale. `→` or `Enter` goes onto the sliders: `← →` band, and on a profile of yours `↑ ↓` gain and `0` back to 0 dB. The built-in profiles cannot be edited: `n` makes one of yours from what you hear. On yours, `r` resets it to the built-in one it came from and `d` deletes it (both ask first). `0` on the list goes back to Flat, and `Esc` closes. Boosts lower the overall level by as much, so they never distort.
 
 ## Hooks
 
@@ -163,12 +236,16 @@ Run your own commands on what happens. Put an executable in `~/.rymus/hooks/` na
 
 | Hook | When | Extra fields |
 |---|---|---|
-| `liked` | you like a song | |
+| `liked` | you like a song (once per song when you like an album) | |
 | `unliked` | you remove the like, or dislike a liked song | |
 | `disliked` | you dislike a song | |
 | `playlist-add` | you add one song to a playlist | `playlist` |
 | `playlist-remove` | you remove a song from a playlist | `playlist` |
 | `playing` | a song starts | |
+| `download-started` | a song starts downloading | `folder`, `format`, `waiting` (songs after it) |
+| `downloaded` | a song's file is ready | `path`, `format` |
+| `download-failed` | a download did not work | `error` (yt-dlp's last line) |
+| `download-deleted` | a downloaded file is deleted | `path`, `bytes`, `reason`: `you` (`m` → *Delete download*) or `free up space` |
 | `played` | it reaches its end | `seconds`, `duration` |
 | `skipped` | you move on before its end | `seconds`, `duration` |
 
@@ -190,6 +267,7 @@ Then `chmod +x ~/.rymus/hooks/liked`. Hooks run in the background and are not st
 - Playback hooks only run while `rymus` is open (not while the music plays on after `Q`), and a song on repeat reports its end only when it stops repeating.
 - Importing a playlist, saving a whole queue as one, or deleting a playlist runs nothing.
 - Two events close together may finish in either order.
+- A song of your own music (Library → Your music) has `url: null` and its file in `path`; `playing`, `played`, `skipped`, `liked`… run for it as for any song. Your own files are never deleted, so they never get `download-deleted`.
 
 ## Your data
 
@@ -275,7 +353,9 @@ No network, sound or real `mpv`, and your database is not touched. Most tests ch
 
 ## Benchmark
 
-`python3 bench/bench.py <command> [<command>…]` compares builds in a pseudo terminal, with audio output off. For example `python3 bench/bench.py ./target/release/rymus`.
+`python3 bench/bench.py <command> [<command>…]` compares builds in a pseudo terminal, with audio output off. For example `python3 bench/bench.py ./target/release/rymus`. It plays real songs and loads the machine: not while you listen to music.
+
+`RYMUS_TRACE=/tmp/trace.txt rymus` writes how long each step of starting took (the first screen is up in about 5 ms; mpv takes about 200 ms to load and is reached in the background).
 
 ## Notes
 

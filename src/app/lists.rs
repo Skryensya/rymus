@@ -1,17 +1,22 @@
 // Which list is on screen and the cursor in it; loading Home, Stats and the other tabs.
+use crate::i18n::tr;
 use super::*;
 
 impl App {
     pub fn data(&self) -> &[Item] {
+        if let Some(f) = self.filtered() {
+            return &f.rows;
+        }
         match self.tab {
             Tab::Home if self.home_focus == PaneId::Left => &self.home_left,
             Tab::Home => &self.home_right,
             Tab::Playlists => &self.playlists,
             Tab::Liked => &self.liked,
             Tab::Queue => &self.queue,
+            Tab::History => &self.played,
+            Tab::Library => &self.library,
             Tab::Stats => &self.stat_rows,
             Tab::Config => &self.settings,
-            Tab::Eq => &[], // its rows are drawn from the profiles
             Tab::Search => &self.items,
         }
     }
@@ -25,14 +30,32 @@ impl App {
         self.tab == Tab::Search && self.result_lists.contains(&self.list_id)
     }
     // The songs from row i on (a mixed list also holds artists, albums and headers).
+    // The History tab: what you heard, newest first, under a heading per day.
+    pub(super) fn load_history(&mut self) {
+        let now = now_ms();
+        let mut day = String::new();
+        self.played = vec![];
+        for (t, at) in self.db.history(500) {
+            let (name, time) = charts::when(at, now);
+            if name != day {
+                self.played.push(Item::header(&name));
+                day = name;
+            }
+            let detail = Some(format!("{} · {time}", t.artist));
+            self.played.push(Item { detail, ..t });
+        }
+    }
     // The Liked tab: your likes, then a small section with the songs you disliked most recently (x takes one back).
     pub(super) fn load_liked(&mut self) {
         const SHOWN: usize = 5;
         let mut rows = self.db.liked();
+        if self.liked_by_album {
+            rows = super::albums::by_album(rows);
+        }
         let disliked = self.db.disliked();
         if !disliked.is_empty() {
-            let more = if disliked.len() > SHOWN { format!(" · last {SHOWN} of {}", disliked.len()) } else { String::new() };
-            rows.push(Item::header(&format!("Disliked{more}")));
+            let more = if disliked.len() > SHOWN { tr!(" · last {shown} of {a}", shown = SHOWN, a = disliked.len()) } else { String::new() };
+            rows.push(Item::header(&tr!("Disliked{more}", more = more)));
             rows.extend(disliked.into_iter().take(SHOWN));
         }
         self.liked = rows;
@@ -66,6 +89,7 @@ impl App {
             }
         }
         self.sel = i.max(0) as usize;
+        self.load_more_results();
     }
     // Is this row the track that is playing? In the queue the same song can appear twice, so compare the entry itself.
     pub fn is_current(&self, it: &Item) -> bool {
@@ -78,13 +102,13 @@ impl App {
         Some(Item {
             kind: Kind::Resume,
             id: "resume".into(),
-            title: format!("⏯ Resume: {}", t.title),
-            detail: Some(format!("{} · at {}", t.artist, fmt(s.time as f64))),
+            title: tr!("⏯ Resume: {a}", a = t.title),
+            detail: Some(tr!("{a} · at {b}", a = t.artist, b = fmt(s.time as f64))),
             ..Default::default()
         })
     }
     pub(super) fn new_playlist_row() -> Item {
-        Item { kind: Kind::NewPlaylist, id: "new".into(), title: "+ New playlist".into(), detail: Some("or paste a link with /".into()), ..Default::default() }
+        Item { kind: Kind::NewPlaylist, id: "new".into(), title: tr!("+ New playlist").into(), detail: Some(tr!("or paste a link with /").into()), ..Default::default() }
     }
     pub(super) fn load_playlists(&mut self) {
         self.playlists = std::iter::once(App::new_playlist_row()).chain(self.db.playlists()).collect();
@@ -117,25 +141,25 @@ impl App {
         let section = |name: &str, list: Vec<Item>| -> Vec<Item> {
             if list.is_empty() { vec![] } else { std::iter::once(Item::header(name)).chain(list).collect() }
         };
-        let discover = Item { kind: Kind::Discover, id: "discover".into(), title: "✦ Discover".into(), detail: Some("new songs · mixes by style".into()), ..Default::default() };
+        let discover = Item { kind: Kind::Discover, id: "discover".into(), title: tr!("✦ Discover").into(), detail: Some(tr!("new songs · mixes by style").into()), ..Default::default() };
         let mut listen: Vec<Item> = self.resume_row().into_iter().chain([discover]).collect();
-        listen.extend(section("Up next", self.queue.iter().skip((self.pos + 1).max(0) as usize).take(5).cloned().collect()));
-        listen.extend(section("Recently played", self.db.recent(50)));
+        listen.extend(section(tr!("Up next"), self.queue.iter().skip((self.pos + 1).max(0) as usize).take(5).cloned().collect()));
+        listen.extend(section(tr!("Recently played"), self.db.recent(50)));
 
         let month = self.db.recap(now_ms() - PERIODS[1].1 * 86_400_000);
         let artists: Vec<Item> = month.artists.into_iter().take(5).map(|r| Item { kind: Kind::ArtistStat, detail: Some(minutes(r.seconds)), ..r }).collect();
-        let searches: Vec<Item> = self.db.recent_searches().into_iter().take(5).map(|q| Item { kind: Kind::Query, id: q.clone(), title: q, detail: Some("search again".into()), ..Default::default() }).collect();
+        let searches: Vec<Item> = self.db.recent_searches().into_iter().take(5).map(|q| Item { kind: Kind::Query, id: q.clone(), title: q, detail: Some(tr!("search again").into()), ..Default::default() }).collect();
         // always there, so there is a place to create the first playlist
-        let mut library: Vec<Item> = std::iter::once(Item::header("Playlists")).chain(self.db.playlists()).chain([App::new_playlist_row()]).collect();
-        library.extend(section("Top artists · this month", artists));
-        library.extend(section("Recent searches", searches));
+        let mut library: Vec<Item> = std::iter::once(Item::header(tr!("Playlists"))).chain(self.db.playlists()).chain([App::new_playlist_row()]).collect();
+        library.extend(section(tr!("Top artists · this month"), artists));
+        library.extend(section(tr!("Recent searches"), searches));
 
         if self.home_wide {
-            self.home_titles = ["Listen".into(), "Library".into()];
+            self.home_titles = [tr!("Listen").into(), tr!("Library").into()];
             self.home_left = listen;
             self.home_right = library;
         } else {
-            self.home_titles = ["Home".into(), String::new()];
+            self.home_titles = [tr!("Home").into(), String::new()];
             listen.extend(library);
             self.home_left = listen;
             self.home_right = vec![];

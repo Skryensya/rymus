@@ -1,4 +1,5 @@
 // The album page's right column: the cover with the album's details under it.
+use crate::i18n::tr;
 use super::*;
 
 impl App {
@@ -6,7 +7,7 @@ impl App {
     // title, artist, year and song count under it. With kitty the cover is a real image at (row, col), set in img,
     // and its rows stay blank.
     #[allow(clippy::too_many_arguments)]
-    pub(super) fn album_side(&mut self, al: &Item, songs: usize, l: usize, r: usize, row: usize, col: usize, img: &mut Option<Placed>) -> Vec<String> {
+    pub(super) fn album_side(&mut self, al: &Item, songs: usize, liked: bool, l: usize, r: usize, row: usize, col: usize, img: &mut Option<Placed>) -> Vec<String> {
         let c = 2 * r;
         let art = match self.cover(&al.cover).filter(|_| !al.cover.is_empty()) {
             Some(got) if self.kitty => {
@@ -20,11 +21,15 @@ impl App {
         side.push(spaces(c));
         side.extend(crate::lyrics::wrap(&al.title, c).into_iter().take(2).map(|t| bold(&cell(&t, c))));
         if al.kind == Kind::Artist {
-            side.push(dim(&cell("Artist", c)));
+            side.push(dim(&cell(tr!("Artist"), c)));
         } else {
             side.push(cell(&al.author, c));
             let year = if al.year.is_empty() { String::new() } else { format!("{} · ", al.year) };
-            side.push(dim(&cell(&format!("{year}{songs} songs"), c)));
+            let count = if songs == 0 { al.year.clone() } else { tr!("{year}{songs} songs", year = year, songs = songs) };
+            side.push(dim(&cell(&count, c)));
+            if !al.id.is_empty() && songs > 0 {
+                side.push(if liked { cell(&tr!("{a} Liked", a = glyphs().like), c) } else { dim(&cell(tr!("l likes the album"), c)) });
+            }
         }
         side.resize(l, spaces(c));
         side.truncate(l);

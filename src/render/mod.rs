@@ -1,5 +1,6 @@
 // Draws the whole screen into one string. Every line is exactly as wide as the terminal.
-use crate::app::{fmt, minutes, App, Control, Geo, Repeat, Marquee, Naming, Pane, PaneId, Tab, CATS, PERIODS};
+use crate::i18n::tr;
+use crate::app::{fmt, minutes, Action, App, KINDS, Control, Geo, Repeat, Marquee, Naming, Pane, PaneId, Tab, CATS, PERIODS};
 use crate::cover::{self, Got};
 use crate::item::{Item, Kind, Origin};
 use crate::lyrics::{self, Lyrics};
@@ -20,7 +21,9 @@ mod images;
 mod help;
 mod eq;
 mod config;
+mod downloads;
 use help::help_rows;
+pub use help::HELP;
 
 // Text that does not fit scrolls sideways (only used on the focused row): it holds for a moment, then loops.
 const MQ_STEP: u128 = 200;
@@ -44,14 +47,15 @@ fn marquee(m: &mut Marquee, text: &str, w: usize) -> String {
 
 const PINK: Rgb = [244, 114, 182];
 const BLUE: Rgb = [125, 160, 220];
-const SPIN: [&str; 10] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+// Only the four middle dots of the braille cell (not its top row), so it turns level with the text around it.
+const SPIN: [&str; 4] = ["⠖", "⠲", "⠴", "⠦"];
 
 fn spin() -> &'static str {
     SPIN[(now_ms() / 100) as usize % SPIN.len()]
 }
 // Selected row: accent bar + soft background. s is plain text of the row minus its first column.
 fn selected(a: Rgb, s: &str) -> String {
-    format!("{}{}▌{}\x1b[1m{s}{RESET}", bgc(RIB), fgc(a), fgc([255, 255, 255]))
+    format!("{}{}▌{}\x1b[1m{s}{RESET}", bgc(rib()), fgc(a), fgc(strong()))
 }
 // A cover color brightened for a dark background.
 fn lift(c: Rgb) -> Rgb {
@@ -96,9 +100,9 @@ impl App {
     // [glyph, color] of a track's rating.
     fn rating(&self, id: &str) -> Option<(&'static str, Rgb)> {
         if self.likes.contains(id) {
-            Some((glyphs().like, PINK))
+            Some((glyphs().like, readable(PINK)))
         } else if self.dislikes.contains(id) {
-            Some((glyphs().dislike, BLUE))
+            Some((glyphs().dislike, readable(BLUE)))
         } else {
             None
         }
@@ -106,10 +110,11 @@ impl App {
     fn tag(&self, id: &str) -> String {
         self.rating(id).map_or(String::new(), |r| format!("{} ", r.0))
     }
-    fn paint(&self, id: &str, text: &str) -> String {
-        match self.rating(id) {
-            Some((g, c)) => text.replacen(g, &fg(c, g), 1),
-            None => text.to_string(),
+    // The playing song's name: all of it in the accent colour, its rating mark keeping its own.
+    fn song_name(&self, id: &str, text: &str, a: Rgb) -> String {
+        match self.rating(id).and_then(|(g, c)| text.split_once(g).map(|(before, after)| (before, g, c, after))) {
+            Some((before, g, c, after)) => bold(&format!("{}{}{}", fg(a, before), fg(c, g), fg(a, after))),
+            None => bold(&fg(a, text)),
         }
     }
 
@@ -122,7 +127,8 @@ impl App {
         let (w, h) = (width_.max(20), height.max(8));
         let compact = h < 22; // too short for the framed dock: two plain lines instead
         let r = if h >= 40 && w >= 80 { 8 } else if h >= 30 && w >= 70 { 6 } else { 4 };
-        let used = 7 + if compact { usize::from(self.wave) } else { r };
+        let gap = !compact && h >= 26; // a blank row in the player between the artist and the visualizer
+        let used = 7 + if compact { usize::from(self.wave) } else { r + usize::from(gap) };
         // rows inside the body frame; the ? page takes the player's place too
         // the search box takes two rows more than the single line of a short screen
         let extra = if compact { 0 } else { 2 };
@@ -131,7 +137,7 @@ impl App {
         mq.on = false; // set again by the focused row if its text overflows
         // the player above the lists moves the body down by the dock's height (its r rows and two borders)
         let top_dock = self.player_top && !compact && !self.help;
-        let mut g = Geo { top: 4 + extra + if top_dock { r + 2 } else { 0 }, ..Default::default() };
+        let mut g = Geo { top: 4 + extra + if top_dock { r + 2 + usize::from(gap) } else { 0 }, ..Default::default() };
         let now = self.now().cloned();
         // the cover is about what plays, else what is highlighted (a setting has nothing to show)
         let focus = now.clone().or_else(|| self.cur().filter(|i| !matches!(i.kind, Kind::Setting | Kind::Header) && self.tab != Tab::Config).cloned());
@@ -151,13 +157,13 @@ impl App {
         }
         // the color follows what plays, never the cursor; while its cover loads, the previous color stays
         match &now {
-            _ if self.accent.is_some() => self.theme.aim(self.accent.unwrap_or(GREEN)),
+            _ if self.accent.is_some() => self.theme.aim(readable(self.accent.unwrap_or(GREEN))),
             Some(t) if !t.cover.is_empty() => {
                 if let Some(got) = got.as_deref() {
-                    self.theme.aim(accent(Some(got)));
+                    self.theme.aim(readable(accent(Some(got))));
                 }
             }
-            _ => self.theme.aim(GREEN),
+            _ => self.theme.aim(readable(GREEN)),
         }
         let a = self.theme.color;
         // what the terminal image shows: the full player may swap in a sharper copy
@@ -166,24 +172,28 @@ impl App {
         // 3. Tab bar and search field
         let count = |n: usize| if n > 0 { format!(" {n}") } else { String::new() };
         let tabs = [
-            ("Home".to_string(), "H"),
-            ("Playlists".to_string(), "P"),
-            (format!("Liked{}", count(self.likes.len())), "L"),
-            (format!("Queue{}", count(self.queue.len())), "Q"),
-            ("Stats".to_string(), "S"),
-            ("Config".to_string(), "C"),
-            ("EQ".to_string(), "E"),
+            (tr!("Home").to_string(), "H"),
+            (tr!("Playlists").to_string(), "P"),
+            (tr!("Liked{a}", a = count(self.likes.len())), "L"),
+            (if self.releases > 0 { tr!("Library ✦{a}", a = self.releases) } else { tr!("Library").to_string() }, "Lb"),
+            (tr!("Queue{a}", a = count(self.queue.len())), "Q"),
+            (tr!("History").to_string(), "Hi"),
+            (tr!("Stats").to_string(), "S"),
+            (tr!("Config").to_string(), "C"),
         ];
         let shown_tab = if self.tab == Tab::Search { self.prev_tab } else { self.tab };
         let active = crate::app::TABS.iter().position(|&t| t == shown_tab).unwrap_or(0);
         let (bar, spans) = tab_bar(w, &tabs, active, a);
         g.tabs = spans;
         let (label, hint, field_color) = match (self.typing, &self.naming) {
-            (true, Some(Naming::Export)) => ("Export to · a new folder of CSV files · Enter saves, Esc cancels", "a folder path", a),
-            (true, Some(Naming::Import)) => ("Import from · replaces all your data · Enter, or Esc", "the folder of an export", a),
-            (true, Some(Naming::Wipe)) => ("⚠ DANGER · deletes all your data · type \"delete all my data\" and Enter, or Esc", "delete all my data", RED),
-            (true, Some(_)) => ("Name", "", a),
-            _ => ("/ Search", "artists, albums, songs, or a Spotify / YouTube playlist link", a),
+            (true, Some(Naming::Export)) => (tr!("Export to · a new folder of CSV files · Enter saves, Esc cancels"), tr!("a folder path"), a),
+            (true, Some(Naming::Import)) => (tr!("Import from · replaces all your data · Enter, or Esc"), tr!("the folder of an export"), a),
+            (true, Some(Naming::Wipe)) => (tr!("⚠ This erases all your data for good · type \"delete all my data\" and Enter, or Esc to keep it"), "delete all my data", RED),
+            (true, Some(Naming::FreeCut)) => (tr!("Free up space · the least played share of your downloads, in % · Enter, or Esc"), "25", a),
+            (true, Some(Naming::Folder)) => (tr!("Downloads folder · Enter saves, Esc cancels"), tr!("a folder path"), a),
+            (true, Some(Naming::Filter)) => (tr!("Filter this list · Enter keeps · Esc clears"), tr!("type a title, artist or album"), a),
+            (true, Some(_)) => (tr!("Name"), "", a),
+            _ => (tr!("/ Search"), tr!("artists, albums, songs, or a Spotify / YouTube playlist link"), a),
         };
         let search = search_bar(w, label, self.typing, if self.typing { &self.buf } else { &self.query }, hint, field_color, !compact);
         g.field_x1 = w;
@@ -195,7 +205,7 @@ impl App {
         } else if !self.msg.is_empty() {
             Some((self.msg.clone(), RED))
         } else if !self.note.is_empty() {
-            Some((self.note.clone(), TXT))
+            Some((self.note.clone(), txt()))
         } else {
             None
         };
@@ -212,9 +222,9 @@ impl App {
         let body: Vec<String> = if self.help {
             let mut rows = help_rows(iw, a);
             self.help_scroll = self.help_scroll.min(rows.len().saturating_sub(l));
-            let more = if rows.len() > l { " · ↑↓ for more" } else { "" };
+            let more = if rows.len() > l { tr!(" · ↑↓ for more") } else { "" };
             rows.drain(..self.help_scroll);
-            frame(&format!("Keys{more} · any other key closes"), a, &blank_to(rows.into_iter().take(l).collect()), w, a)
+            frame(&tr!("Keys{more} · any other key closes", more = more), a, &blank_to(rows.into_iter().take(l).collect()), w, a)
         } else if let Some(m) = &self.menu {
             g.menu_top = (m.sel + 1).saturating_sub(l);
             let rows = m
@@ -231,17 +241,17 @@ impl App {
                     format!(" {row} ")
                 })
                 .collect();
-            frame(&format!("Actions · {}", m.title), a, &blank_to(rows), w, a)
+            frame(&tr!("Actions · {a}", a = m.title), a, &blank_to(rows), w, a)
         } else if self.lyrics {
             let rows = self.lyric_rows(iw, l, a);
             let playing = now.as_ref().map_or(String::new(), |t| format!(" · {} — {}", t.title, t.artist));
-            let plain = if matches!(self.lyrics_ready(), Some(Lyrics::Plain(_))) { " · not synced" } else { "" };
-            let mode = if self.karaoke { "Karaoke" } else { "Lyrics" };
+            let plain = if matches!(self.lyrics_ready(), Some(Lyrics::Plain(_))) { tr!(" · not synced") } else { "" };
+            let mode = if self.karaoke { tr!("Karaoke") } else { tr!("Lyrics") };
             let (t, c) = title_for(&format!("{mode}{playing}{plain}"));
             g.panes.push(pane(PaneId::Cover, 1, w, 0, 0));
             frame(&t, c, &rows, w, a)
         } else if self.full && self.trip_on {
-            let react = if self.wave { "" } else { " · w to react to the music" };
+            let react = if self.wave { "" } else { tr!(" · w to react to the music") };
             let (id, title, artist) = now.as_ref().map_or(("", "", ""), |t| (t.id.as_str(), t.title.as_str(), t.artist.as_str()));
             let palette = got.as_ref().filter(|_| now.is_some()).map_or_else(|| vec![a], |g| g.palette.clone());
             let lyric = if self.trip_lyrics && now.is_some() {
@@ -254,8 +264,8 @@ impl App {
                 None
             };
             let rows = self.trip.frame(iw, l, self.trip_t, self.time as f64, &self.bands, self.energy, &palette, id, title, artist, lyric.as_deref());
-            let held = if self.trip.locked { " · held" } else { "" };
-            let (t, c) = title_for(&format!("Trip · {}{held}{react}", self.trip.scene_name()));
+            let held = if self.trip.locked { tr!(" · held") } else { "" };
+            let (t, c) = title_for(&tr!("Trip · {a}{held}{react}", a = self.trip.scene_name(), held = held, react = react));
             g.panes.push(pane(PaneId::Cover, 1, w, 0, 0));
             frame(&t, c, &rows, w, a)
         } else if self.full {
@@ -266,21 +276,33 @@ impl App {
                     sharp_got = Some(sharp);
                 }
             }
-            let (rows, at) = self.full_pane(g.top, iw, l, focus.as_ref(), got.as_ref());
+            let (rows, at) = self.full_pane(&mut g, iw, l, focus.as_ref(), got.as_ref());
             image = at;
-            let (t, c) = title_for("Now playing");
+            let (t, c) = title_for(tr!("Now playing"));
             g.panes.push(pane(PaneId::Cover, 1, w, 0, 0));
             frame(&t, c, &rows, w, a)
         } else if self.tab == Tab::Home {
             self.home_body(&v, &mut mq, &mut g)
         } else if self.tab == Tab::Stats {
             self.stats_body(&v, &mut mq, &mut g)
-        } else if self.tab == Tab::Eq {
-            self.eq_body(&v)
         } else if self.tab == Tab::Config {
             self.config_body(&v, &mut g)
         } else {
             self.list_body(&v, &mut mq, &mut g, &mut head_img)
+        };
+        // the equalizer's window sits over whatever is there
+        let body = if self.eq.open && !self.help && self.menu.is_none() && !self.lyrics && !self.full {
+            g.panes.clear();
+            g.links.clear();
+            head_img = None; // a real image would show through the window
+            self.eq_window(&v, &mut g, body)
+        } else if self.downloads.open && !self.help && self.menu.is_none() && !self.lyrics && !self.full {
+            g.panes.clear();
+            g.links.clear();
+            head_img = None;
+            self.downloads_window(&v, &mut g, body)
+        } else {
+            body
         };
         g.body = l;
 
@@ -288,7 +310,7 @@ impl App {
         let mut lines = vec![bar];
         lines.extend(search);
         if top_dock {
-            let (rows, at) = self.dock(&mut g, w, lines.len() + 2, r, focus.as_ref(), got.as_ref(), a);
+            let (rows, at) = self.dock(&mut g, w, lines.len() + 2, r, gap, focus.as_ref(), got.as_ref(), a);
             lines.extend(rows);
             image = image.or(at);
         }
@@ -300,12 +322,12 @@ impl App {
             lines.extend(player);
         } else {
             let first = l + g.top + 2;
-            let (rows, at) = self.dock(&mut g, w, first, r, focus.as_ref(), got.as_ref(), a);
+            let (rows, at) = self.dock(&mut g, w, first, r, gap, focus.as_ref(), got.as_ref(), a);
             lines.extend(rows);
             image = image.or(at);
         }
         // 6. The keys that work right now
-        let hint_list = self.hint_list();
+        let hint_list: Vec<_> = self.hint_list().into_iter().map(|(key, what)| (crate::i18n::t(key), crate::i18n::t(what))).collect();
         lines.push(hints(&hint_list, w, a));
         self.geo = g;
         self.mq = mq;

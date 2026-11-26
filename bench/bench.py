@@ -111,7 +111,7 @@ def measure(command):
     app.ready()
     app.pump(3)
     os.write(app.fd, b"\r")  # the Resume row
-    app.ready("▶".encode())
+    app.ready(b"Now playing")
     app.pump(10)
     for k, v in window(app).items():
         result[f"playing + visualizer: {k}"] = v

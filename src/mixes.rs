@@ -1,6 +1,7 @@
 // Gathers candidates (YouTube Music radios, and artists ListenBrainz finds similar) and hands them to the ranking,
 // plus the two outside services involved: similar artists and genre tags from ListenBrainz, artist ids from
 // MusicBrainz (same project). No account; only artist names and their public ids are sent, and answers are cached.
+use crate::i18n::tr;
 use crate::db::{now_ms, Db};
 use crate::item::{clean, Item, Spec};
 use crate::recommend::{self as rec, Source};
@@ -182,7 +183,7 @@ pub fn build_mix(yt: &Yt, db_path: &Path, spec: &Spec) -> Result<Mix, String> {
         }
     };
     if seeds.is_empty() {
-        return Err("nothing to start from yet: play or like a few songs".into());
+        return Err(tr!("nothing to start from yet: play or like a few songs").into());
     }
     let mut error = String::new();
     let (mut lists, failed) = thread::scope(|s| {
@@ -199,7 +200,7 @@ pub fn build_mix(yt: &Yt, db_path: &Path, spec: &Spec) -> Result<Mix, String> {
         (lists, failed)
     });
     if lists.iter().all(|l| l.tracks.is_empty()) {
-        return Err(if error.is_empty() { "no recommendations".into() } else { error });
+        return Err(if error.is_empty() { tr!("no recommendations").into() } else { error });
     }
     lists.retain(|l| !l.tracks.is_empty());
     // a radio from one song starts with that song
@@ -228,7 +229,7 @@ pub fn find_styles(db_path: &Path) -> Result<Vec<rec::Style>, String> {
         known.push((id, a.name.clone(), a.score, list.into_iter().map(|s| s.0.to_lowercase()).collect::<Vec<_>>()));
     }
     if !top.is_empty() && known.is_empty() {
-        return Err("ListenBrainz did not recognize your artists or is unreachable".into());
+        return Err(tr!("ListenBrainz did not recognize your artists or is unreachable").into());
     }
     let tags = genres(&db, &known.iter().map(|k| k.0.clone()).collect::<Vec<_>>())?;
     let artists = known

@@ -73,7 +73,7 @@ fn tints(old: Rgb, new: Rgb) -> Vec<(Rgb, Rgb)> {
     for h in 2..=8 {
         for row in 0..h {
             let light = 0.6 * (1.0 - row as f64 / (h - 1) as f64);
-            let tint = |c: Rgb| mix(c, [255; 3], light);
+            let tint = |c: Rgb| crate::ui::tint(c, light);
             out.push((tint(new), tint(old)));
         }
     }

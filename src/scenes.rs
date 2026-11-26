@@ -29,18 +29,24 @@ pub fn to_rows(cells: &[Cell], w: usize, h: usize) -> Vec<String> {
     (0..h)
         .map(|j| {
             let mut line = String::with_capacity(w * 6);
-            let mut last = None;
+            let (mut fg, mut bg) = (None, None);
             for c in &cells[j * w..(j + 1) * w] {
                 if c.ch == SKIP {
                     continue;
                 }
-                let style = (q(c.fg), q(c.bg));
-                if last != Some(style) {
-                    let ([a, b, d], [e, f, g]) = style;
-                    let _ = write!(line, "\x1b[38;2;{a};{b};{d};48;2;{e};{f};{g}m");
-                    last = Some(style);
+                let (f, b) = (q(c.fg), q(c.bg));
+                // a half block in one colour is a space; a space needs no foreground. Each colour is sent only when
+                // it changes: the screen is the same, with far less for the terminal to read
+                let ch = if c.ch == '▀' && f == b { ' ' } else { c.ch };
+                if bg != Some(b) {
+                    let _ = write!(line, "\x1b[48;2;{};{};{}m", b[0], b[1], b[2]);
+                    bg = Some(b);
                 }
-                line.push(c.ch);
+                if ch != ' ' && fg != Some(f) {
+                    let _ = write!(line, "\x1b[38;2;{};{};{}m", f[0], f[1], f[2]);
+                    fg = Some(f);
+                }
+                line.push(ch);
             }
             line.push_str("\x1b[39;49m");
             line
@@ -531,17 +537,35 @@ fn draw(k: usize, m: &mut Mem, f: &Feel, p: &Pal, w: usize, h: usize, smoke: &mu
         // ----- Ambience: soft clouds that flow
         6 => smoke.cells(w, h, f.t, song.raw, song.colors, song.id, song.energy),
         7 => {
-            let mut px = Px { px: &mut m.px, pw: w, ph: 2 * h };
+            let px = Px { px: &mut m.px, pw: w, ph: 2 * h };
             if live || px.px[0] == [0.0; 3] {
                 let (t, bass) = (f.t, f.bass);
                 let bright = 0.35 + 0.5 * f.energy;
-                px.each(|x, y| {
-                    let w1 = (x * 1.3 + t * 0.21 + 1.5 * (y * 1.7 - t * 0.17).sin() * (0.6 + bass)).sin();
-                    let w2 = (y * 1.1 - t * 0.13 + 1.2 * (x * 2.1 + t * 0.11).sin()).sin();
-                    let w3 = ((x + y) * 0.9 + t * 0.07).sin();
-                    let v = 0.5 + (w1 + w2 + w3) / 6.0;
-                    scale(paint(p, v * 0.9 + t * 0.015), bright + 0.2 * v)
-                });
+                // three waves, each sin(a(x) + b(y)) = sin a·cos b + cos a·sin b: the sines and cosines are worked out
+                // once per column and once per row instead of for every pixel
+                let cols: Vec<[f64; 6]> = (0..px.pw)
+                    .map(|i| {
+                        let x = px.norm(i, 0).0;
+                        let (a, d, e) = (x * 1.3 + t * 0.21, 1.2 * (x * 2.1 + t * 0.11).sin(), x * 0.9);
+                        [a.sin(), a.cos(), d.sin(), d.cos(), e.sin(), e.cos()]
+                    })
+                    .collect();
+                let rows: Vec<[f64; 6]> = (0..px.ph)
+                    .map(|j| {
+                        let y = px.norm(0, j).1;
+                        let (b, c, e) = (1.5 * (y * 1.7 - t * 0.17).sin() * (0.6 + bass), y * 1.1 - t * 0.13, y * 0.9 + t * 0.07);
+                        [b.sin(), b.cos(), c.sin(), c.cos(), e.sin(), e.cos()]
+                    })
+                    .collect();
+                for (j, r) in rows.iter().enumerate() {
+                    for (i, c) in cols.iter().enumerate() {
+                        let w1 = c[0] * r[1] + c[1] * r[0];
+                        let w2 = r[2] * c[3] + r[3] * c[2];
+                        let w3 = c[4] * r[5] + c[5] * r[4];
+                        let v = 0.5 + (w1 + w2 + w3) / 6.0;
+                        px.px[j * px.pw + i] = scale(paint(p, v * 0.9 + t * 0.015), bright + 0.2 * v);
+                    }
+                }
             }
             px.cells()
         }

@@ -36,15 +36,17 @@ impl App {
             let shown = crate::home::window(&headers, l, Some(sel));
             let visible: Vec<Item> = shown.iter().map(|&i| list[i].clone()).collect();
             let at = shown.iter().position(|&i| i == sel).unwrap_or(usize::MAX);
-            let rows = self.list_rows(mq, &visible, at, 0, cw.saturating_sub(2), l, focused, a, playing, "");
+            let mut links = vec![];
+            let rows = self.list_rows(mq, &visible, at, 0, cw.saturating_sub(2), l, focused, a, playing, "", &mut links);
+            g.links.extend(links.into_iter().map(|(act, a0, a1, y)| (act, a0 + x0 + 1, a1 + x0 + 1, y + g.top)));
             if column == 0 {
                 self.home_left = list;
             } else {
                 self.home_right = list;
             }
             let name = self.home_titles[column].clone();
-            let (t, c) = if focused { v.title(&name) } else { (name, TXT) };
-            columns.push(frame(&t, c, &rows, cw, if focused { a } else { GRAY }));
+            let (t, c) = if focused { v.title(&name) } else { (name, txt()) };
+            columns.push(frame(&t, c, &rows, cw, if focused { a } else { gray() }));
             g.panes.push(Pane { rows: Some(shown), ..pane(id, x0, x0 + cw - 1, 0, 0) });
             x0 += cw;
         }

@@ -547,10 +547,12 @@ fn q_stops_the_music_and_capital_q_leaves_it_playing_to_be_found_again() {
 
 // ---------- config ----------
 fn open_config(ui: &mut Ui) {
-    for _ in 0..5 {
-        ui.key(KeyCode::Tab); // Home → Playlists → Liked → Queue → Stats → Config
+    for _ in 0..7 {
+        ui.key(KeyCode::Tab); // Home → Playlists → Liked → Library → Queue → History → Stats → Config
     }
     assert_eq!(ui.app.tab, Tab::Config);
+    assert_eq!(ui.app.cur().unwrap().id, "language", "the language comes first");
+    ui.key(KeyCode::Down); // onto Crossfade, where these tests start
 }
 
 #[test]
@@ -558,7 +560,7 @@ fn the_config_tab_changes_settings_saves_them_and_tells_the_player() {
     let mut ui = Ui::new();
     open_config(&mut ui);
     for label in ["Crossfade", "Even out loudness", "Audio quality", "Pixel art covers", "Visualizer"] {
-        assert!(ui.shows(label), "{label} is listed\n{}", ui.screen().join("\n"));
+        assert!(ui.app.settings.iter().any(|r| r.title == label), "{label} is listed");
     }
     assert!(ui.shows("[off]"));
     ui.key(KeyCode::Right);
@@ -573,6 +575,8 @@ fn the_config_tab_changes_settings_saves_them_and_tells_the_player() {
     assert!(ui.told().contains(&json!(["af", "add", crate::config::NORMALIZE])));
     ui.key(KeyCode::Enter); // and off again
     assert!(ui.told().contains(&json!(["af", "remove", "@norm"])));
+    ui.key(KeyCode::Down); // past Channels and the equalizer
+    ui.key(KeyCode::Down);
     ui.key(KeyCode::Down);
     ui.key(KeyCode::Right); // Audio quality: data saver
     assert!(ui.told().contains(&json!(["set_property", "ytdl-format", "worstaudio/worst"])));
@@ -606,7 +610,7 @@ fn the_config_tab_shows_every_choice_and_explains_the_one_you_are_on() {
         assert!(ui.shows(heading), "{heading}\n{}", ui.screen().join("\n"));
     }
     assert!(ui.shows("[off]") && ui.shows(" 12 s "), "every choice is in view");
-    assert!(ui.shows("Crossfade · off") && ui.shows("no overlap"), "the setting under the cursor, explained");
+    assert!(ui.shows("Crossfade · off") && ui.shows("no overlap"), "the setting under the cursor, explained\n{}", ui.screen().join("\n"));
     assert!(!ui.shows("Preview"), "the player below does not preview a setting");
     ui.key(KeyCode::Right);
     ui.key(KeyCode::Right);
@@ -616,12 +620,12 @@ fn the_config_tab_shows_every_choice_and_explains_the_one_you_are_on() {
 }
 
 #[test]
-fn the_eq_tab_explains_the_bands_and_moves_them_with_sliders() {
+fn the_eq_window_explains_the_bands_and_moves_them_with_sliders() {
     let mut ui = Ui::new();
     ui.size = (110, 34);
     ui.ch('E');
-    assert_eq!(ui.app.tab, Tab::Eq);
-    for part in ["EQ · Flat", "PROFILES", "+12 ┤", "  0 ┼", "-12 ┤", "bass", "mids", "treble", "16k", "The music as it was mixed"] {
+    assert!(ui.app.eq.open && ui.app.tab == Tab::Home);
+    for part in ["EQ · Flat", "BUILT IN", "+12 ┤", "  0 ┼", "-12 ┤", "bass", "mids", "treble", "16k", "The music as it was mixed"] {
         assert!(ui.shows(part), "{part}\n{}", ui.screen().join("\n"));
     }
     for _ in 0..5 {
@@ -633,11 +637,24 @@ fn the_eq_tab_explains_the_bands_and_moves_them_with_sliders() {
     ui.key(KeyCode::Right); // 62 Hz
     assert!(ui.shows("62 Hz · Bass · +3 dB") && ui.shows("The weight of the kick drum"), "{}", ui.screen().join("\n"));
     ui.key(KeyCode::Up);
-    assert_eq!(ui.app.eq_current().0, "My Rock", "a built-in profile is copied, never changed");
+    assert!(ui.app.eq_current().0 == "Rock" && ui.app.db.get_setting("eq_presets").is_none(), "a built-in profile is never changed or copied");
+    assert!(ui.told().is_empty() && ui.shows("n makes your own from it"), "{}", ui.screen().join("\n"));
+    ui.ch('n'); // also from the sliders
+    ui.text("Loud");
+    ui.key(KeyCode::Enter);
+    ui.key(KeyCode::Right);
+    ui.key(KeyCode::Up);
+    assert!(ui.shows("● Loud") && ui.shows("YOURS") && ui.shows("62 Hz · Bass · +4 dB"), "{}", ui.screen().join("\n"));
     assert!(ui.told().contains(&json!(["af-command", "eq", "gain", "4", "equalizer@b1"])), "and the change is heard");
-    assert!(ui.shows("● My Rock ✎") && ui.shows("62 Hz · Bass · +4 dB"));
+    ui.key(KeyCode::Esc);
+    ui.ch('0');
+    assert_eq!(ui.app.eq_current().0, "Flat", "back to the default");
+    assert!(ui.told().contains(&json!(["af-command", "eq", "gain", "0", "equalizer@b1"])));
+    assert_eq!(crate::eq::presets(None)[5].gains[1], 3, "Rock as it came");
     ui.key(KeyCode::Tab);
-    assert_eq!(ui.app.tab, Tab::Home, "the keys it does not use still work");
+    assert!(ui.app.eq.open && ui.app.tab == Tab::Home, "the window keeps its keys");
+    ui.key(KeyCode::Esc);
+    assert!(!ui.app.eq.open);
 }
 
 #[test]
@@ -684,9 +701,11 @@ fn a_narrow_config_shows_only_the_chosen_value() {
     let mut ui = Ui::new();
     ui.size = (50, 24); // too narrow for every choice
     open_config(&mut ui);
-    assert!(ui.shows("‹ off ›") && !ui.shows("12 s"), "{}", ui.screen().join("\n"));
-    ui.key(KeyCode::Right);
-    assert!(ui.shows("‹ 2 s ›"), "and ← → still change it");
+    assert!(ui.shows("[off]") && ui.shows("›") && !ui.shows("12 s"), "the ones around the chosen one: {}", ui.screen().join("\n"));
+    for _ in 0..5 {
+        ui.key(KeyCode::Right);
+    }
+    assert!(ui.shows("[12 s]") && ui.shows("‹") && !ui.shows(" off "), "and ← → still change it, the line following: {}", ui.screen().join("\n"));
 }
 
 // ---------- albums ----------
@@ -694,8 +713,9 @@ fn open_album(ui: &mut Ui) {
     // a solid red cover, already loaded, so nothing is fetched
     ui.app.covers.insert("test://road".into(), Some(Arc::new(crate::cover::Got { b64: "AAAA".into(), rgb: [200, 30, 30], palette: vec![], image: vec![] })));
     ui.search("record");
+    ui.key(KeyCode::Right); // the Albums tab
     assert!(ui.shows("Long Road"));
-    ui.key(KeyCode::Enter); // the album is the first result
+    ui.key(KeyCode::Enter);
     ui.wait("the album page", |ui| ui.app.title.starts_with("Long Road"));
 }
 
@@ -794,7 +814,7 @@ fn a_real_album_cover_and_the_players_live_side_by_side_until_pixel_art_is_on() 
     ui.key(KeyCode::Esc);
     ui.set_tab_home();
     open_config(&mut ui);
-    for _ in 0..3 {
+    for _ in 0..5 {
         ui.key(KeyCode::Down);
     }
     ui.drawn();
@@ -831,7 +851,7 @@ fn stats_rank_by_minutes_only_and_never_count_plays() {
             listened(db, &short, ago, 60); // five times, 5 min
         }
     });
-    for _ in 0..4 {
+    for _ in 0..6 {
         ui.key(KeyCode::Tab);
     }
     assert_eq!(ui.app.tab, Tab::Stats);
@@ -851,7 +871,7 @@ fn stats_rank_by_minutes_only_and_never_count_plays() {
 #[test]
 fn stats_show_charts_when_there_is_room() {
     let mut ui = Ui::with(|db| listened(db, &song("a", "A"), 5, 300));
-    for _ in 0..4 {
+    for _ in 0..6 {
         ui.key(KeyCode::Tab);
     }
     assert!(ui.shows("Per day") && ui.shows("By hour of day"));
@@ -1139,6 +1159,27 @@ fn karaoke_is_centred_the_big_line_the_dots_the_note_and_the_lines_around() {
     }
 }
 
+#[test]
+fn karaoke_letters_can_be_changed_and_are_remembered() {
+    use crate::bigtext::Style;
+    let mut ui = singing(100.0);
+    ui.size = (110, 34);
+    // the karaoke panel only: the player under it draws its own braille
+    let words = |ui: &mut Ui| ui.screen().iter().take_while(|l| !l.contains("Now playing")).cloned().collect::<String>();
+    assert_eq!(ui.app.karaoke_style, Style::Dots);
+    ui.ch('Y');
+    ui.ch('f');
+    assert_eq!(ui.app.db.get_setting("karaoke_style").as_deref(), Some("solid"));
+    assert!(words(&mut ui).chars().any(|c| ('\u{1FB00}'..='\u{1FB3B}').contains(&c)), "{}", ui.screen().join("\n"));
+    ui.ch('f');
+    assert!(ui.app.karaoke_style == Style::Blocks && words(&mut ui).contains('█') && !words(&mut ui).chars().any(braille));
+    ui.size = (60, 20); // too small for blocks: the dots, not plain text
+    assert!(words(&mut ui).chars().any(braille), "{}", ui.screen().join("\n"));
+    ui.ch('f');
+    assert_eq!(ui.app.karaoke_style, Style::Dots);
+    assert_eq!(Ui::with(|db| db.set_setting("karaoke_style", "blocks")).app.karaoke_style, Style::Blocks);
+}
+
 // ---------- equalizer ----------
 #[test]
 fn the_equalizer_switches_profiles_and_makes_your_own() {
@@ -1153,7 +1194,7 @@ fn the_equalizer_switches_profiles_and_makes_your_own() {
     ui.ch('n');
     ui.text("Mine");
     ui.key(KeyCode::Enter);
-    assert!(ui.shows("● Mine ✎") && ui.app.eq_current().0 == "Mine", "{}", ui.screen().join("\n"));
+    assert!(ui.shows("● Mine") && ui.app.eq_current().0 == "Mine", "{}", ui.screen().join("\n"));
     ui.key(KeyCode::Right); // second band
     ui.key(KeyCode::Up);
     ui.key(KeyCode::Up);
@@ -1171,6 +1212,15 @@ fn the_equalizer_switches_profiles_and_makes_your_own() {
     let told = next.told();
     assert!(told.contains(&json!(["af", "add", crate::eq::filter()])) && told.contains(&json!(["af-command", "eq", "gain", "7", "equalizer@b1"])));
     next.ch('E');
+    // reset: back to the profile it came from (none recorded: flat), after asking
+    next.ch('r');
+    next.key(KeyCode::Enter);
+    assert!(next.app.eq_current().1[1] == 7, "keeping is the default");
+    next.ch('r');
+    next.key(KeyCode::Down);
+    next.key(KeyCode::Enter);
+    assert_eq!((next.app.eq_current().0.as_str(), next.app.eq_current().1), ("Mine", [0; 10]));
+    assert!(next.app.eq.open, "still in the window");
     next.ch('d');
     next.key(KeyCode::Down);
     next.key(KeyCode::Enter);
@@ -1321,7 +1371,8 @@ fn the_visualizer_gets_the_whole_width_of_the_player() {
     assert_eq!(c.iter().map(|c| c.3).collect::<Vec<_>>(), [ui.app.geo.bar_row; 4], "the buttons sit on the progress line");
     let title = rows.iter().position(|r| r.contains("Result One") && r.contains("1/")).expect("song and count on one line");
     assert!(rows[title + 1].contains("vol 100"), "the volume under the count");
-    let wave = &rows[title + 2];
+    assert!(rows[title + 2].trim_matches(|c| c == ' ' || c == '│').is_empty(), "a blank row between the artist and the visualizer");
+    let wave = &rows[title + 3];
     let drawn = wave.chars().filter(|c| !matches!(c, ' ' | '│')).count();
     assert!(drawn > 120, "the visualizer spans the dock: {drawn} columns\n{wave}");
     assert!(rows.iter().all(|r| r.chars().count() == 140), "every row exactly as wide as the screen");
@@ -1381,6 +1432,396 @@ fn got(ui: &mut Ui, event: &str, n: usize) -> Vec<Value> {
     let all = read();
     assert_eq!(all.len(), n, "{event}: {all:?}");
     all
+}
+
+#[test]
+fn a_whole_album_is_liked_from_its_page_and_seen_by_album() {
+    let mut ui = Ui::new();
+    hooks_into(&ui, &["liked", "unliked"], 0);
+    open_album(&mut ui);
+    assert!(ui.shows("l likes the album"), "{}", ui.screen().join("\n"));
+    ui.ch('l'); // on Play album
+    assert_eq!(ui.app.likes.len(), 3, "every song, not whatever was playing");
+    assert_eq!(got(&mut ui, "liked", 3).len(), 3);
+    assert!(ui.shows("Liked Long Road: 3 songs"), "{}", ui.screen().join("\n"));
+    assert_eq!(ui.app.db.liked().iter().map(|t| t.title.as_str()).collect::<Vec<_>>(), ["Opening", "Middle", "Ending"]);
+    ui.ch('l'); // again: asks, and keeping is the default
+    ui.key(KeyCode::Enter);
+    assert_eq!(ui.app.likes.len(), 3);
+    ui.app.set_tab(Tab::Liked);
+    ui.key(KeyCode::Right);
+    assert!(ui.app.liked_by_album && ui.shows("Long Road · Band · 3 songs"), "{}", ui.screen().join("\n"));
+    assert_eq!(ui.app.cur().unwrap().title, "Opening", "the cursor skips the heading");
+    ui.key(KeyCode::Enter);
+    assert_eq!(ui.queue(), ["Opening", "Middle", "Ending"]);
+    ui.key(KeyCode::Left);
+    assert!(!ui.app.liked_by_album && !ui.shows("Long Road · Band · 3 songs"));
+}
+
+#[test]
+fn an_album_row_is_liked_from_the_results_and_unliked_after_asking() {
+    let mut ui = Ui::new();
+    ui.search("record");
+    ui.key(KeyCode::Right); // the Albums tab
+    ui.ch('l');
+    ui.wait("the likes", |ui| ui.app.likes.len() == 3);
+    assert_eq!(ui.app.tab, Tab::Search, "you stay where you were");
+    ui.ch('l');
+    ui.wait("the question", |ui| ui.app.menu.is_some());
+    ui.key(KeyCode::Down);
+    ui.key(KeyCode::Enter);
+    assert!(ui.app.likes.is_empty());
+}
+
+#[test]
+fn the_names_in_the_player_open_their_pages() {
+    let mut ui = Ui::new();
+    open_album(&mut ui);
+    ui.key(KeyCode::Enter); // Play album
+    ui.app.set_tab(Tab::Home);
+    // the player's credits line, under the song's title: "Band · Long Road"
+    let credits = |ui: &mut Ui, what: &str| {
+        let screen = ui.screen();
+        let row = screen.iter().position(|l| l.contains("Band · Long Road")).unwrap_or_else(|| panic!("{}", screen.join("\n")));
+        (width(&screen[row][..screen[row].find(what).unwrap()]) + 1, row + 1)
+    };
+    let (x, y) = credits(&mut ui, "Long Road");
+    ui.click(x + 2, y);
+    ui.wait("the album", |ui| ui.app.tab == Tab::Search && ui.app.title.starts_with("Long Road"));
+    ui.app.set_tab(Tab::Home);
+    let (x, y) = credits(&mut ui, "Band");
+    ui.click(x, y);
+    ui.wait("the artist", |ui| ui.app.tab == Tab::Search && ui.app.title == "Band");
+    ui.app.set_tab(Tab::Home);
+    ui.ch('o');
+    ui.wait("the album, by key", |ui| ui.app.title.starts_with("Long Road"));
+    ui.app.set_tab(Tab::Home);
+    ui.ch('v'); // the big player: the artist on a line of its own
+    let screen = ui.screen();
+    let row = screen.iter().position(|l| l.trim_matches(['│', ' ', '·', '∘']) == "Band").unwrap_or_else(|| panic!("{}", screen.join("\n")));
+    ui.click(width(&screen[row][..screen[row].find("Band").unwrap()]) + 2, row + 1);
+    ui.wait("the artist, from the big player", |ui| !ui.app.full && ui.app.title == "Band");
+}
+
+#[test]
+fn names_in_lists_open_their_pages_with_a_click() {
+    let mut ui = Ui::new();
+    ui.search("record");
+    ui.key(KeyCode::Right); // the Albums tab
+    // the album's row: its artist, then (back) its name
+    let on_row = |ui: &mut Ui, name: &str, what: &str| {
+        let screen = ui.screen();
+        let row = screen.iter().take_while(|l| !l.contains("Now playing")).position(|l| l.contains(name) && l.contains(what) && !l.contains("Results for")).unwrap_or_else(|| panic!("{}", screen.join("\n")));
+        (width(&screen[row][..screen[row].rfind(what).unwrap()]) + 2, row + 1)
+    };
+    let (x, y) = on_row(&mut ui, "Long Road", "Band");
+    ui.click(x, y);
+    ui.wait("the artist", |ui| ui.app.title == "Band");
+    ui.key(KeyCode::Esc);
+    let (x, y) = on_row(&mut ui, "Band", "Long Road");
+    ui.click(x, y);
+    ui.wait("the album", |ui| ui.app.title.starts_with("Long Road"));
+    // Stats and Home place their lists elsewhere: the same click there
+    ui.key(KeyCode::Enter); // Play album
+    ui.mpv_says(json!({"event": "file-loaded"}));
+    ui.property("duration", json!(200.0));
+    ui.property("time-pos", json!(1.0));
+    ui.property("time-pos", json!(2.0));
+    ui.mpv_says(json!({"event": "end-file", "reason": "eof"}));
+    ui.size = (110, 40);
+    for tab in [Tab::Stats, Tab::Home] {
+        ui.app.set_tab(tab);
+        let (x, y) = on_row(&mut ui, "Opening", "Band");
+        ui.click(x, y);
+        ui.wait("the artist", |ui| ui.app.tab == Tab::Search && ui.app.title == "Band");
+    }
+}
+
+#[test]
+fn search_results_have_a_tab_for_each_kind_and_load_more() {
+    let mut ui = Ui::new();
+    ui.search("record");
+    assert!(ui.shows("[Songs 3]") && ui.shows("Albums 1") && ui.shows("Artists 0") && ui.shows("Result One"), "{}", ui.screen().join("\n"));
+    ui.key(KeyCode::Right);
+    assert!(ui.shows("[Albums 1]") && ui.shows("Long Road") && !ui.shows("Result One"));
+    ui.key(KeyCode::Right);
+    assert!(ui.shows("No artists found."));
+    ui.key(KeyCode::Right); // round to the songs
+    let (x, y) = ui.at("Albums 1");
+    ui.click(x, y);
+    assert!(ui.shows("[Albums 1]"), "a tab is clickable");
+    ui.key(KeyCode::Enter);
+    ui.wait("the album", |ui| ui.app.title.starts_with("Long Road"));
+    ui.key(KeyCode::Esc);
+    assert!(ui.shows("[Albums 1]"), "back to the tab you were on");
+    // a long tab asks for its next page when you get near the end
+    ui.search("many");
+    ui.wait("the new results", |ui| ui.app.title.contains("many"));
+    assert!(ui.shows("[Songs 8+]"), "{}", ui.screen().join("\n"));
+    for _ in 0..4 {
+        ui.key(KeyCode::Down);
+    }
+    ui.wait("the next page", |ui| ui.app.items.len() == 10);
+    assert!(ui.shows("[Songs 10]") && ui.shows("Later Two"));
+    assert_eq!(ui.app.sel, 4, "the cursor stays");
+}
+
+#[test]
+fn the_queue_names_the_album_and_it_opens() {
+    let mut ui = Ui::new();
+    ui.size = (130, 34);
+    open_album(&mut ui);
+    ui.key(KeyCode::Enter); // Play album
+    ui.app.set_tab(Tab::Queue);
+    let screen = ui.screen();
+    let row = screen.iter().position(|l| l.contains("Middle") && l.contains("Band · Long Road")).unwrap_or_else(|| panic!("{}", screen.join("\n")));
+    ui.click(width(&screen[row][..screen[row].find("Long Road").unwrap()]) + 2, row + 1);
+    ui.wait("the album", |ui| ui.app.tab == Tab::Search && ui.app.title.starts_with("Long Road"));
+}
+
+#[test]
+fn mono_is_switched_without_replacing_a_filter() {
+    let mut ui = Ui::new();
+    ui.app.set_tab(Tab::Config);
+    while ui.app.cur().is_some_and(|i| i.id != "channels") {
+        ui.key(KeyCode::Down);
+    }
+    ui.told();
+    for (m, shown) in [("0", "mono"), ("1", "stereo")] {
+        ui.key(KeyCode::Right);
+        let told = ui.told();
+        assert!(told.contains(&json!(["af-command", "eq", "m", m, "extrastereo@mono"])) && told.iter().all(|c| c[0] != "af"), "{told:?}");
+        assert!(ui.shows(shown));
+    }
+    let mut next = Ui::with(|db| db.set_setting("channels", "mono"));
+    next.app.start();
+    assert!(next.told().contains(&json!(["af-command", "eq", "m", "0", "extrastereo@mono"])), "mono again on the next run");
+}
+
+#[test]
+fn the_equalizer_opens_from_config_as_a_window_and_resets_to_its_origin() {
+    let mut ui = Ui::new();
+    ui.size = (120, 36);
+    ui.app.set_tab(Tab::Config);
+    while ui.app.cur().is_some_and(|i| i.id != "eq") {
+        ui.key(KeyCode::Down);
+    }
+    assert!(ui.shows("Equalizer: Flat…"));
+    ui.key(KeyCode::Enter);
+    let screen = ui.screen();
+    assert!(ui.app.eq.open && screen.iter().any(|l| l.contains("EQ · Flat")), "{}", screen.join("\n"));
+    assert!(screen.iter().all(|l| width(l) == 120), "the window over the page keeps every row exact");
+    assert!(screen.iter().any(|l| l.contains("Config")), "the page stays behind it");
+    let (x, y) = ui.at("Pop");
+    ui.click(x, y);
+    assert_eq!(ui.app.eq_current().0, "Pop");
+    ui.ch('n');
+    ui.text("Mi pop");
+    ui.key(KeyCode::Enter);
+    ui.key(KeyCode::Down); // 31 Hz, down one
+    assert_eq!(ui.app.eq_current().1[0], -2);
+    assert!(ui.shows("reset") && ui.shows("delete"), "{}", ui.screen().join("\n"));
+    ui.ch('r');
+    ui.key(KeyCode::Down);
+    ui.key(KeyCode::Enter);
+    assert_eq!(ui.app.eq_current().1, crate::eq::built_in("Pop"), "as Pop came");
+    ui.key(KeyCode::Esc); // off the sliders
+    ui.key(KeyCode::Esc); // closed
+    assert!(!ui.app.eq.open && ui.shows("Equalizer: Mi pop…"), "{}", ui.screen().join("\n"));
+}
+
+#[test]
+fn the_sleep_timer_stops_the_music() {
+    let mut ui = Ui::new();
+    ui.play_a_result();
+    ui.ch('z');
+    assert!(ui.shows("Stop in 30 minutes"), "{}", ui.screen().join("\n"));
+    ui.key(KeyCode::Down);
+    ui.key(KeyCode::Down);
+    ui.key(KeyCode::Down);
+    ui.key(KeyCode::Down);
+    ui.key(KeyCode::Down);
+    ui.key(KeyCode::Enter); // when this song ends
+    assert!(ui.shows("sleep after this song"), "{}", ui.screen().join("\n"));
+    ui.told();
+    ui.mpv_says(json!({"event": "file-loaded"})); // the next one starts
+    assert!(ui.told().contains(&json!(["set_property", "pause", true])));
+    assert!(!ui.shows("sleep after"));
+}
+
+#[test]
+fn the_queue_can_be_cleared_and_removals_taken_back() {
+    let mut ui = Ui::new();
+    ui.play_a_result();
+    let full = ui.queue().len();
+    assert!(full > 3);
+    ui.app.set_tab(Tab::Queue);
+    ui.key(KeyCode::Down);
+    ui.ch('d');
+    assert_eq!(ui.queue().len(), full - 1);
+    ui.ch('u');
+    assert_eq!(ui.queue().len(), full, "the removed song is back");
+    ui.ch('c');
+    ui.key(KeyCode::Enter); // keeping is the default
+    assert_eq!(ui.queue().len(), full);
+    ui.ch('c');
+    ui.key(KeyCode::Down);
+    ui.key(KeyCode::Down);
+    ui.key(KeyCode::Enter);
+    assert_eq!(ui.queue(), ["Result One"]);
+    ui.ch('u');
+    assert_eq!(ui.queue().len(), full);
+}
+
+#[test]
+fn ctl_like_likes_what_plays() {
+    let mut ui = Ui::new();
+    ui.play_a_result();
+    ui.mpv_says(json!({"event": "client-message", "args": ["rymus-like"]}));
+    assert!(ui.app.likes.contains("s1"));
+}
+
+#[test]
+fn f_filters_a_list_and_esc_clears_it() {
+    let mut ui = Ui::new();
+    ui.play_a_result();
+    ui.app.set_tab(Tab::Queue);
+    let all = ui.app.data().len();
+    ui.ch('f');
+    ui.text("similar c");
+    assert_eq!(ui.app.data().iter().map(|t| t.title.as_str()).collect::<Vec<_>>(), ["Similar C"]);
+    assert!(ui.shows("Filter \"similar c\" · 1"), "{}", ui.screen().join("\n"));
+    ui.key(KeyCode::Enter); // keep it
+    ui.key(KeyCode::Enter); // and play what was found
+    assert!(ui.told().contains(&json!(["playlist-play-index", 3])));
+    ui.key(KeyCode::Esc);
+    assert!(ui.app.data().len() == all && ui.app.cur().unwrap().title == "Similar C", "cleared, still on what you found");
+}
+
+#[test]
+fn history_lists_what_you_heard_by_day() {
+    let mut ui = Ui::new();
+    ui.play_a_result();
+    ui.mpv_says(json!({"event": "file-loaded"}));
+    ui.property("duration", json!(200.0));
+    ui.property("time-pos", json!(1.0));
+    ui.property("time-pos", json!(2.0));
+    ui.mpv_says(json!({"event": "end-file", "reason": "eof"}));
+    ui.app.set_tab(Tab::History);
+    assert!(ui.shows("Today") && ui.shows("Result One") && ui.shows("Band · "), "{}", ui.screen().join("\n"));
+    assert_eq!(ui.app.cur().unwrap().title, "Result One");
+}
+
+#[test]
+fn the_command_palette_finds_a_command_and_does_it() {
+    let mut ui = Ui::new();
+    ui.ch(':');
+    assert!(ui.shows("commands · type to find"));
+    ui.text("equa");
+    assert!(ui.shows("commands: equa") && ui.shows("Equalizer") && !ui.shows("Next song"), "{}", ui.screen().join("\n"));
+    ui.key(KeyCode::Enter);
+    assert!(ui.app.eq.open);
+    ui.key(KeyCode::Esc);
+    ui.ch(':');
+    ui.text("go hist");
+    ui.key(KeyCode::Enter);
+    assert_eq!(ui.app.tab, Tab::History);
+}
+
+#[test]
+fn liking_an_album_puts_it_in_the_library() {
+    let mut ui = Ui::new();
+    open_album(&mut ui);
+    ui.ch('l');
+    ui.app.set_tab(Tab::Library);
+    assert!(ui.shows("Albums") && ui.shows("Long Road"), "{}", ui.screen().join("\n"));
+    assert_eq!(ui.app.cur().unwrap().title, "Long Road");
+    ui.ch('d');
+    ui.key(KeyCode::Down);
+    ui.key(KeyCode::Enter);
+    assert!(ui.app.db.saved_albums().is_empty() && ui.app.likes.len() == 3, "the songs stay liked");
+}
+
+#[test]
+fn followed_artists_show_their_new_releases() {
+    let mut ui = Ui::new();
+    ui.app.db.follow("UCnews", "Newsy", "", &json!([]));
+    ui.app.start();
+    ui.wait("the news", |ui| ui.app.releases == 1);
+    assert!(ui.shows("Library ✦1"), "{}", ui.screen().join("\n"));
+    ui.app.set_tab(Tab::Library);
+    assert!(ui.shows("New releases") && ui.shows("Fresh Record") && ui.shows("Newsy"));
+    ui.key(KeyCode::Enter); // opening it: no longer news
+    assert_eq!(ui.app.releases, 0);
+}
+
+#[test]
+fn f_capital_follows_and_unfollows_an_artist() {
+    let mut ui = Ui::new();
+    ui.search("Band");
+    ui.key(KeyCode::Left); // the Artists tab
+    assert_eq!(ui.app.cur().unwrap().title, "Band");
+    ui.ch('F');
+    ui.wait("followed", |ui| ui.app.db.follows().len() == 1);
+    ui.ch('F');
+    assert!(ui.app.db.follows().is_empty());
+}
+
+#[test]
+fn a_downloaded_song_plays_from_its_file() {
+    let mut ui = Ui::new();
+    hooks_into(&ui, &["downloaded"], 0);
+    ui.search("band");
+    ui.ch('b');
+    ui.wait("the file", |ui| ui.app.downloaded("s1"));
+    let file = ui.app.downloads.files["s1"].clone();
+    assert!(file.starts_with(ui.dir.join("music")) && file.to_string_lossy().ends_with("Band - Result One [s1].mp3"), "{file:?}");
+    assert_eq!(got(&mut ui, "downloaded", 1)[0]["path"], file.to_string_lossy().as_ref());
+    assert!(ui.shows("↓"), "marked in the list: {}", ui.screen().join("\n"));
+    ui.told();
+    ui.key(KeyCode::Enter);
+    assert!(ui.told().contains(&json!(["loadfile", file.to_string_lossy(), "replace"])));
+    ui.ch('m');
+    assert!(ui.shows("Delete download"), "{}", ui.screen().join("\n"));
+    ui.key(KeyCode::Esc);
+    ui.app.delete_download("s1");
+    assert!(!file.exists() && !ui.app.downloaded("s1"));
+}
+
+#[test]
+fn keeping_likes_offline_downloads_each_like() {
+    let mut ui = Ui::with(|db| db.set_setting("download", "liked songs"));
+    ui.app.start();
+    ui.search("band");
+    ui.ch('l');
+    ui.wait("the file", |ui| ui.app.downloaded("s1"));
+}
+
+#[test]
+fn the_language_is_chosen_in_config_and_kept() {
+    let mut ui = Ui::new();
+    ui.app.set_tab(Tab::Config);
+    assert_eq!(ui.app.cur().unwrap().id, "language");
+    ui.key(KeyCode::Right);
+    assert!(ui.shows("Inicio") && ui.shows("Ajustes") && ui.shows("[Español]") && ui.shows("[no]") && ui.shows("Fundido"), "{}", ui.screen().join("\n"));
+    assert!(crate::manual::help().contains("Teclas (dentro de rymus)"));
+    ui.key(KeyCode::Left);
+    assert!(ui.shows("Home") && ui.shows("Crossfade"));
+    let mut next = Ui::with(|db| db.set_setting("language", "español"));
+    next.app.start();
+    assert!(next.shows("Inicio"), "{}", next.screen().join("\n"));
+    crate::i18n::set("english");
+}
+
+#[test]
+fn a_choice_in_config_is_clicked() {
+    let mut ui = Ui::new();
+    ui.size = (120, 40);
+    ui.app.set_tab(Tab::Config);
+    let (x, y) = ui.at(" mono ");
+    ui.click(x + 1, y);
+    assert_eq!(ui.app.db.get_setting("channels").as_deref(), Some("mono"));
+    assert!(ui.shows("[mono]"));
 }
 
 #[test]
@@ -1488,7 +1929,7 @@ fn your_data_exports_wipes_only_with_the_word_and_imports_back() {
     // wipe: the field is a red warning, and anything but the word deletes nothing
     to_data_row(&mut ui, "wipe");
     ui.key(KeyCode::Enter);
-    assert!(ui.shows("⚠ DANGER"), "{}", ui.screen().join("\n"));
+    assert!(ui.shows("⚠ This erases all your data"), "{}", ui.screen().join("\n"));
     ui.text("yes");
     ui.key(KeyCode::Enter);
     assert_eq!(ui.app.likes.len(), 1, "not the word: nothing deleted");
@@ -1501,6 +1942,15 @@ fn your_data_exports_wipes_only_with_the_word_and_imports_back() {
     ui.key(KeyCode::Enter);
     assert!(ui.app.likes.is_empty() && ui.app.db.liked_ids().is_empty(), "wiped");
     assert!(ui.dir.join("t.db").is_file(), "an empty database is made again at once");
+    // the song still playing is counted in the new database, not written over some old play's row
+    ui.play_a_result();
+    ui.mpv_says(json!({"event": "file-loaded"}));
+    ui.app.wipe_data(crate::app::WIPE_WORD);
+    ui.property("duration", json!(200.0));
+    ui.property("time-pos", json!(1.0));
+    ui.property("time-pos", json!(2.0));
+    ui.mpv_says(json!({"event": "end-file", "reason": "eof"}));
+    assert_eq!(ui.app.db.listening(0).len(), 1, "one play, in the new database");
     ui.search("again"); // and it works as on the first run
     ui.ch('l');
     assert_eq!(ui.app.db.liked_ids().len(), 1);
@@ -1516,4 +1966,217 @@ fn your_data_exports_wipes_only_with_the_word_and_imports_back() {
     ui.key(KeyCode::Enter);
     assert_eq!(ui.app.likes.len(), 1, "{}", ui.app.msg);
     assert!(ui.app.likes.contains("s1"), "the like from the file");
+}
+
+// ---------- speed (run by hand: cargo test --release frame_time -- --ignored --nocapture) ----------
+#[test]
+#[ignore]
+fn frame_time() {
+    for (name, size) in [("100x34", (100, 34)), ("200x60", (200, 60))] {
+        let mut ui = Ui::new();
+        ui.size = size;
+        ui.play_a_result();
+        ui.property("duration", json!(200.0));
+        let n = 2000;
+        let t = Instant::now();
+        for i in 0..n {
+            ui.app.bands = [((i % 10) as f64) / 10.0; crate::viz::BANDS];
+            ui.app.time = (i / 25) as i64;
+            let _ = ui.app.render(size.0, size.1);
+        }
+        let per = t.elapsed() / n;
+        ui.app.full = true;
+        let t = Instant::now();
+        for _ in 0..n {
+            let _ = ui.app.render(size.0, size.1);
+        }
+        let full = t.elapsed() / n;
+        ui.app.full = false;
+        ui.ch('y');
+        let t = Instant::now();
+        for _ in 0..n {
+            let _ = ui.app.render(size.0, size.1);
+        }
+        let lyr = t.elapsed() / n;
+        ui.ch('y');
+        ui.ch('V');
+        let t = Instant::now();
+        for i in 0..n {
+            ui.app.trip_t = i as f64 * 0.04;
+            let _ = ui.app.render(size.0, size.1);
+        }
+        println!("{name}: list {per:?} · full player {full:?} · lyrics {lyr:?} · trip {:?} ({})", t.elapsed() / n, ui.app.trip.scene_name());
+    }
+}
+
+#[test]
+#[ignore]
+fn trip_scene_times() {
+    let mut ui = Ui::new();
+    ui.size = (200, 60);
+    ui.play_a_result();
+    ui.property("duration", json!(200.0));
+    ui.ch('V');
+    for _ in 0..14 {
+        let (t, mut bytes) = (Instant::now(), 0);
+        for i in 0..300 {
+            ui.app.trip_t = i as f64 * 0.04;
+            ui.app.bands = [((i % 10) as f64) / 10.0; crate::viz::BANDS];
+            bytes += ui.app.render(200, 60).len();
+        }
+        println!("{:>8.0?} {:>6} KB/frame  {}", t.elapsed() / 300, bytes / 300 / 1024, ui.app.trip.scene_name());
+        ui.ch(']');
+    }
+}
+
+#[test]
+fn light_mode_draws_dark_text_on_light_tones_and_darkens_the_accent() {
+    let mut ui = Ui::with(|db| {
+        db.set_setting("mode", "light");
+        db.set_setting("accent", "yellow");
+    });
+    ui.play_a_result();
+    ui.search("band");
+    let frame = ui.app.render(100, 34);
+    assert!(frame.contains("48;2;216;216;222"), "the light tone behind the selected row");
+    assert!(!frame.contains("48;2;48;48;52"), "not the dark one");
+    let a = ui.app.theme.color;
+    let lum = 0.2126 * a[0] as f64 + 0.7152 * a[1] as f64 + 0.0722 * a[2] as f64;
+    assert!(lum <= 111.0, "yellow is darkened enough to read on white: {a:?}");
+    // and back to dark
+    to_data_row(&mut ui, "export");
+    let at = ui.app.settings.iter().position(|r| r.id == "mode").unwrap();
+    ui.app.sel = at;
+    ui.key(KeyCode::Right);
+    assert!(ui.app.render(100, 34).contains("48;2;48;48;52"), "dark again, at once");
+}
+
+#[test]
+fn your_own_music_plays_from_the_folder_and_is_never_deleted() {
+    let mut ui = Ui::with(|db| db.set_setting("library", "on"));
+    let song = ui.dir.join("music/Album/Band - Mine.flac");
+    std::fs::create_dir_all(song.parent().unwrap()).unwrap();
+    std::fs::write(&song, "audio").unwrap();
+    ui.app.start();
+    ui.wait("the folder read", |ui| !ui.app.downloads.own.is_empty());
+    ui.app.set_tab(Tab::Library);
+    assert!(ui.shows("Your music") && ui.shows("Mine"), "{}", ui.screen().join("\n"));
+    while ui.app.cur().is_some_and(|t| t.title != "Mine") {
+        ui.key(KeyCode::Down);
+    }
+    ui.told();
+    ui.key(KeyCode::Enter);
+    assert!(ui.told().contains(&json!(["loadfile", song.to_string_lossy(), "replace"])));
+    ui.ch('m');
+    assert!(!ui.shows("Delete download"), "{}", ui.screen().join("\n"));
+    ui.key(KeyCode::Esc);
+    let id = format!("file:{}", song.to_string_lossy());
+    ui.app.delete_download(&id);
+    assert!(song.exists(), "your own file stays");
+}
+
+#[test]
+fn freeing_space_deletes_the_least_played_downloads() {
+    let mut ui = Ui::new();
+    ui.app.start();
+    ui.search("band");
+    ui.ch('b');
+    ui.wait("the first file", |ui| ui.app.downloaded("s1"));
+    ui.key(KeyCode::Down);
+    let second = ui.app.cur().cloned().unwrap();
+    ui.ch('b');
+    ui.wait("the second file", |ui| ui.app.downloaded(&second.id));
+    let play = ui.app.db.start_play(&second, 1);
+    ui.app.db.end_play(play, 100, None, false);
+    let (first, kept) = (ui.app.downloads.files["s1"].clone(), ui.app.downloads.files[&second.id].clone());
+    ui.app.ask_free_space(50);
+    assert!(ui.shows("least played 50 %") && ui.shows("Delete 1 song,"), "{}", ui.screen().join("\n"));
+    ui.key(KeyCode::Down);
+    ui.key(KeyCode::Enter);
+    assert!(!first.exists() && !ui.app.downloaded("s1"), "the one never heard goes");
+    assert!(kept.exists() && ui.app.downloaded(&second.id), "the one heard stays");
+    assert!(ui.app.msg.contains("Freed") || ui.shows("Freed"), "{}", ui.app.msg);
+}
+
+#[test]
+fn the_downloads_window_holds_the_settings_and_frees_space_by_a_typed_share() {
+    let mut ui = Ui::new();
+    ui.ch('B');
+    assert!(ui.shows("Downloads") && ui.shows("Keep offline") && ui.shows("Free up space…") && ui.shows("songs downloaded"), "{}", ui.screen().join("\n"));
+    ui.key(KeyCode::Right); // Keep offline: liked songs
+    assert_eq!(crate::config::value(&ui.app.db, "download"), "liked songs");
+    for _ in 0..10 {
+        ui.key(KeyCode::Down); // to the last row, Free up space
+    }
+    ui.key(KeyCode::Enter);
+    assert!(ui.app.typing, "asks how much");
+    assert_eq!(ui.app.buf, "25", "the last share offered again");
+    ui.app.buf = "150".into();
+    ui.key(KeyCode::Enter);
+    assert!(ui.app.msg.contains("1 to 100") || ui.shows("1 to 100"), "a share out of range is refused: {}", ui.app.msg);
+    ui.key(KeyCode::Esc);
+    assert!(!ui.app.downloads.open, "Esc closes it");
+}
+
+#[test]
+fn a_short_screen_keeps_the_player_without_the_blank_row() {
+    let mut ui = Ui::new();
+    ui.size = (100, 24);
+    ui.play_a_result();
+    ui.app.bands = [1.0; crate::viz::BANDS];
+    let rows = ui.screen();
+    let title = rows.iter().position(|r| r.contains("Result One") && r.contains("1/")).expect("the player");
+    assert!(!rows[title + 2].trim_matches(|c| c == ' ' || c == '│').is_empty(), "the visualizer right under the artist");
+    let (x, y) = ui.at(crate::ui::glyphs().pause);
+    ui.click(x, y);
+    assert!(ui.told().contains(&json!(["cycle", "pause"])), "the buttons still answer where they are drawn");
+}
+
+#[test]
+fn a_restart_opens_on_the_tab_it_was_on() {
+    let mut ui = Ui::new();
+    ui.key(KeyCode::Tab);
+    ui.key(KeyCode::Tab);
+    let tab = ui.app.tab;
+    ui.press(KeyCode::Char('r'), KeyModifiers::CONTROL);
+    assert!(ui.app.restart);
+    let i: usize = ui.app.db.get_setting("restart_tab").unwrap().parse().unwrap();
+    assert_eq!(crate::app::TABS[i], tab);
+}
+
+#[test]
+fn downloads_run_their_hooks_from_start_to_deletion() {
+    let mut ui = Ui::new();
+    hooks_into(&ui, &["download-started", "downloaded", "download-deleted"], 0);
+    ui.search("band");
+    ui.ch('b');
+    let started = got(&mut ui, "download-started", 1);
+    assert_eq!((started[0]["id"].as_str(), started[0]["format"].as_str(), started[0]["waiting"].as_u64()), (Some("s1"), Some("mp3"), Some(0)));
+    let done = got(&mut ui, "downloaded", 1);
+    assert_eq!(done[0]["format"], "mp3");
+    ui.app.ask_free_space(100);
+    ui.key(KeyCode::Down);
+    ui.key(KeyCode::Enter);
+    let gone = got(&mut ui, "download-deleted", 1);
+    assert_eq!((gone[0]["id"].as_str(), gone[0]["reason"].as_str()), (Some("s1"), Some("free up space")));
+    assert!(gone[0]["bytes"].as_u64().unwrap() > 0 && gone[0]["path"].as_str().unwrap().ends_with(".mp3"));
+}
+
+#[test]
+fn a_song_of_your_own_tells_hooks_its_path_not_a_url() {
+    let mut ui = Ui::with(|db| db.set_setting("library", "on"));
+    hooks_into(&ui, &["liked"], 0);
+    let song = ui.dir.join("music/Band - Mine.flac");
+    std::fs::create_dir_all(song.parent().unwrap()).unwrap();
+    std::fs::write(&song, "audio").unwrap();
+    ui.app.start();
+    ui.wait("the folder read", |ui| !ui.app.downloads.own.is_empty());
+    ui.app.set_tab(Tab::Library);
+    while ui.app.cur().is_some_and(|t| t.title != "Mine") {
+        ui.key(KeyCode::Down);
+    }
+    ui.ch('l');
+    let liked = got(&mut ui, "liked", 1);
+    assert!(liked[0]["url"].is_null(), "{liked:?}");
+    assert_eq!(liked[0]["path"], song.to_string_lossy().as_ref());
 }

@@ -1,4 +1,6 @@
 // The Stats tab's charts: time listened over the period (per day, or per month for a year) and by hour of day.
+use crate::i18n::t;
+use crate::i18n::tr;
 use crate::ui::{dim, fg, Rgb};
 
 const DAY_NAMES: [&str; 7] = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -18,6 +20,17 @@ fn day(tm: &libc::tm) -> i64 {
     era * 146_097 + yoe * 365 + yoe / 4 - yoe / 100 + doy - 719_468
 }
 
+// ("Today" | "Yesterday" | "Mon 23 Nov", "14:05") for a moment, on the local calendar.
+pub fn when(at: i64, now: i64) -> (String, String) {
+    let tm = local(at);
+    let name = match day(&local(now)) - day(&tm) {
+        0 => tr!("Today").to_string(),
+        1 => tr!("Yesterday").to_string(),
+        _ => format!("{} {} {}", t(DAY_NAMES[tm.tm_wday as usize % 7]), tm.tm_mday, t(MONTHS[tm.tm_mon as usize % 12])),
+    };
+    (name, format!("{:02}:{:02}", tm.tm_hour, tm.tm_min))
+}
+
 // Seconds listened per bucket, oldest first, with a label for each: the last `days` days (named by weekday for a
 // week, by date for longer), or the last 12 months for a year.
 pub fn timeline(plays: &[(i64, i64)], now: i64, days: i64) -> (Vec<i64>, Vec<String>) {
@@ -31,7 +44,7 @@ pub fn timeline(plays: &[(i64, i64)], now: i64, days: i64) -> (Vec<i64>, Vec<Str
                 v[11 - ago as usize] += s;
             }
         }
-        let labels = (0..12).map(|i| MONTHS[(today.tm_mon as usize + 1 + i) % 12].to_string()).collect();
+        let labels = (0..12).map(|i| t(MONTHS[(today.tm_mon as usize + 1 + i) % 12]).to_string()).collect();
         return (v, labels);
     }
     let n = days as usize;
@@ -45,7 +58,7 @@ pub fn timeline(plays: &[(i64, i64)], now: i64, days: i64) -> (Vec<i64>, Vec<Str
     let labels = (0..n)
         .map(|i| {
             let tm = local(now - (n - 1 - i) as i64 * 86_400_000);
-            if days <= 7 { DAY_NAMES[tm.tm_wday as usize].to_string() } else { tm.tm_mday.to_string() }
+            if days <= 7 { t(DAY_NAMES[tm.tm_wday as usize]).to_string() } else { tm.tm_mday.to_string() }
         })
         .collect();
     (v, labels)

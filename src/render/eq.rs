@@ -1,39 +1,61 @@
-// The EQ tab: the profiles on the left; on the right a slider per band on a dB scale, what range each band is in,
-// and what the band (or the profile) under the cursor does to the sound.
+// The equalizer's window: the profiles on the left (built in, then yours); on the right a slider per band on a dB
+// scale, what range each band is in, and what the band (or the profile) under the cursor does; its keys at the foot.
+use crate::i18n::tr;
 use super::*;
+use crate::app::Action;
 use crate::eq::{self, BANDS, FREQS, LIMIT, REGIONS};
 
 const SCALE: usize = 5; // "+12 ┤"
 
 impl App {
-    pub(super) fn eq_body(&mut self, v: &View) -> Vec<String> {
-        let (w, iw, l, a) = (v.w, v.iw, v.l, v.a);
+    // The window drawn over `behind` (the body frame as it was), which stays dimmed around it.
+    pub(super) fn eq_window(&mut self, v: &View, g: &mut Geo, behind: Vec<String>) -> Vec<String> {
+        let a = v.a;
+        let (x, y, ww, wh, screen_row) = window_at(v, g, behind.len(), 110);
+        let (iw, l) = (ww.saturating_sub(2), wh.saturating_sub(2));
+
         let (sel, band) = (self.eq.sel, self.eq.band);
         let all = self.eq_presets();
         let (current, gains) = self.eq_current();
-        let custom = all.iter().any(|p| p.name == current && p.custom);
+        let mine = all.iter().find(|p| p.name == current && p.custom);
+        let list_l = l.saturating_sub(1); // the keys take the last row
 
-        // left: the profiles
+        // left: the profiles under two headings; None marks a row that is not a profile
         let lw = if iw < 100 { 18 } else { 24 }.min(iw / 3); // a narrow screen gives the sliders the room
-        let mut names: Vec<String> = all.iter().map(|p| format!("{} {}{}", if p.name == current { "●" } else { " " }, p.name, if p.custom { " ✎" } else { "" })).collect();
-        names.push("  + New profile".into());
-        let n = l.saturating_sub(1); // under the heading
-        let top = sel.saturating_sub(n.saturating_sub(1));
-        let mut left = vec![dim(&bold(&cell(" PROFILES", lw)))];
-        left.extend((0..n).map(|i| match names.get(top + i) {
-            Some(name) if top + i == sel && band.is_none() => selected(a, &cell(name, lw.saturating_sub(1))),
-            Some(name) if top + i == all.iter().position(|p| p.name == current).unwrap_or(usize::MAX) => fg(a, &cell(&format!(" {name}"), lw)),
-            Some(name) => cell(&format!(" {name}"), lw),
-            None => spaces(lw),
-        }));
+        let mut entries: Vec<(String, Option<usize>)> = vec![(tr!(" BUILT IN").into(), None)];
+        for (i, p) in all.iter().enumerate() {
+            if p.custom && (i == 0 || !all[i - 1].custom) {
+                entries.push((tr!(" YOURS").into(), None));
+            }
+            entries.push((format!("{} {}", if p.name == current { "●" } else { " " }, crate::i18n::any(&p.name)), Some(i)));
+        }
+        entries.push((tr!("  + New profile").into(), Some(all.len())));
+        let at = entries.iter().position(|e| e.1 == Some(sel)).unwrap_or(0);
+        let top = (at + 1).saturating_sub(list_l).min(entries.len().saturating_sub(list_l));
+        let left: Vec<String> = (0..list_l)
+            .map(|i| match entries.get(top + i) {
+                None => spaces(lw),
+                Some((name, None)) => dim(&bold(&cell(name, lw))),
+                Some((name, Some(n))) => {
+                    g.links.push((Action::PickEq(*n), x + 3, x + 2 + lw, screen_row + 1 + i));
+                    if *n == sel && band.is_none() {
+                        selected(a, &cell(name, lw.saturating_sub(1)))
+                    } else if all.get(*n).is_some_and(|p| p.name == current) {
+                        fg(a, &cell(&format!(" {name}"), lw))
+                    } else {
+                        cell(&format!(" {name}"), lw)
+                    }
+                }
+            })
+            .collect();
 
         // right: the sliders, then what they mean
-        let gw = iw.saturating_sub(lw + 4); // " list │ right"
+        let gw = iw.saturating_sub(lw + 4);
         let col = gw.saturating_sub(SCALE) / FREQS.len();
         let right: Vec<String> = if col < 4 {
-            vec![dim(&cell("Widen the window to see the sliders.", gw))]
+            vec![dim(&cell(tr!("Widen the window to see the sliders."), gw))]
         } else {
-            let mut r = sliders(&gains, band, col, l.saturating_sub(6), a);
+            let mut r = sliders(&gains, band, col, list_l.saturating_sub(6), a);
             r.push(format!("{}{}", spaces(SCALE), FREQS.iter().enumerate().map(|(i, f)| mark(&center(&eq::freq_label(*f), col), band == Some(i), a)).collect::<String>()));
             r.push(format!("{}{}", dim(&format!("{:>w$} ", "dB", w = SCALE - 1)), gains.iter().enumerate().map(|(i, g)| {
                 let t = center(&if *g == 0 { "0".into() } else { format!("{g:+}") }, col);
@@ -43,22 +65,83 @@ impl App {
             r.push(String::new());
             // the explanation: the band you move, or the profile you hear
             let (title, about) = match band {
-                Some(b) => (format!("{} Hz · {} · {:+} dB", eq::freq_label(FREQS[b]), BANDS[b].0, gains[b]), cap(BANDS[b].1)),
-                None => (format!("{current}{}", if custom { " · yours" } else { "" }), eq::describe(&gains)),
+                Some(b) => (tr!("{a} Hz · {b} · {c} dB", a = eq::freq_label(FREQS[b]), b = crate::i18n::t(BANDS[b].0), c = format!("{:+}", gains[b])), cap(crate::i18n::t(BANDS[b].1))),
+                None => {
+                    let whose = mine.map_or(tr!("built in").to_string(), |p| {
+                        let edited = if p.gains == eq::built_in(&p.base) { tr!("same as") } else { tr!("edited from") };
+                        tr!("yours · {edited} {a}", edited = edited, a = p.base)
+                    });
+                    (format!("{current} · {whose}"), eq::describe(&gains))
+                }
             };
             r.push(fg(a, &bold(&cut(&title, gw))));
             r.push(cut(&about, gw));
             r
         };
-        let rows: Vec<String> = (0..l)
+        let mut rows: Vec<String> = (0..list_l)
             .map(|i| {
                 let side = right.get(i).cloned().unwrap_or_default();
                 format!(" {} {} {}", left.get(i).cloned().unwrap_or_else(|| spaces(lw)), dim("│"), pad_visible(&side, gw))
             })
             .collect();
-        let (t, c) = v.title(&format!("EQ · {current}"));
-        frame(&t, c, &rows, w, a)
+        // what works here, said where you are looking
+        let keys: &[(&str, &str)] = match (band, mine.is_some()) {
+            (None, true) => &[("⏎", "edit"), ("r", "reset"), ("d", "delete"), ("n", "new"), ("0", "flat"), ("esc", "close")],
+            (None, false) => &[("↑↓", "choose"), ("n", tr!("new from this")), ("0", "flat"), ("esc", "close")],
+            (Some(_), true) => &[("←→", "band"), ("↑↓", "gain"), ("0", "zero"), ("r", "reset"), ("d", "delete"), ("esc", "back")],
+            (Some(_), false) => &[("←→", "band"), ("n", tr!("new from this to edit it")), ("esc", "back")],
+        };
+        rows.push(keys_line(keys, iw, a));
+        rows.truncate(l);
+
+        let (title, color) = v.title(&tr!("EQ · {current}", current = current)); // notes and errors show here too
+        overlay(behind, &frame(&title, color, &rows, ww, a), x, y, v.w)
     }
+}
+
+// Where a window over the body sits: centred, at most `max` wide. (x, y, width, height, its top row on screen)
+pub(super) fn window_at(v: &View, g: &mut Geo, rows: usize, max: usize) -> (usize, usize, usize, usize, usize) {
+    let w = v.w;
+    let ww = if w < 80 { w } else { (w - 8).min(max) };
+    let wh = rows.min(26);
+    let (x, y) = ((w - ww) / 2, (rows - wh) / 2);
+    let screen_row = g.top - 1 + y; // the body frame's border is the row above its first one
+    g.window = Some((x + 1, x + ww, screen_row, screen_row + wh - 1));
+    (x, y, ww, wh, screen_row)
+}
+
+// The window drawn over what is behind it, which dims.
+pub(super) fn overlay(behind: Vec<String>, window: &[String], x: usize, y: usize, w: usize) -> Vec<String> {
+    let ww = window.first().map_or(0, |r| width(&plain(r)));
+    behind
+        .into_iter()
+        .enumerate()
+        .map(|(i, row)| {
+            let under = plain(&row);
+            match i.checked_sub(y).and_then(|j| window.get(j)) {
+                None => dim(&under),
+                Some(win) => {
+                    let before = pad_visible(take(&under, x), x);
+                    let rest: String = under.chars().skip(take(&under, x + ww).chars().count()).collect();
+                    format!("{}{win}{}", dim(&before), dim(&pad_visible(&rest, w.saturating_sub(x + ww))))
+                }
+            }
+        })
+        .collect()
+}
+
+// The keys that work, at the foot of a window.
+pub(super) fn keys_line(keys: &[(&str, &str)], iw: usize, a: Rgb) -> String {
+    let (mut foot, mut used) = (" ".to_string(), 1);
+    for (key, what) in keys.iter().map(|(key, what)| (crate::i18n::t(key), crate::i18n::t(what))) {
+        let n = width(key) + width(what) + 4;
+        if used + n > iw {
+            break;
+        }
+        foot += &format!("{} {}   ", fg(a, &bold(key)), dim(what));
+        used += n;
+    }
+    format!("{foot}{}", spaces(iw.saturating_sub(used)))
 }
 
 // One slider per band: a track from -LIMIT to +LIMIT dB, filled from 0 to the knob. `h` rows at most, kept odd so
@@ -109,7 +192,7 @@ fn regions(col: usize) -> String {
         .iter()
         .map(|(name, n)| {
             let inner = (n * col).saturating_sub(2);
-            let label = format!(" {name} ");
+            let label = format!(" {} ", crate::i18n::t(name));
             if width(&label) > inner {
                 return format!("╰{}╯", "─".repeat(inner));
             }
