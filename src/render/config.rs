@@ -1,5 +1,5 @@
-// The Config tab: each group under its heading, every setting with all its choices in view (the chosen one
-// marked), and below, what the setting under the cursor does, in full.
+// The Config tab: its sections on the left, the settings of the one holding the cursor on the right, and under the
+// setting being changed, all its choices and what it does.
 use crate::i18n::tr;
 use super::*;
 use crate::config;
@@ -9,87 +9,132 @@ impl App {
     pub(super) fn config_body(&mut self, v: &View, g: &mut Geo) -> Vec<String> {
         let (w, iw, l, a) = (v.w, v.iw, v.l, v.a);
         let data = std::mem::take(&mut self.settings);
-        let sel = self.sel;
-        let lw = data.iter().filter(|r| r.kind == Kind::Setting).map(|r| width(&r.title)).max().unwrap_or(0) + 4;
+        let (sel, in_menu) = (self.sel, self.config_menu);
+        // the sections: (heading row, its title); the one holding the cursor is shown
+        let sections: Vec<(usize, &str)> = data.iter().enumerate().filter(|(_, r)| r.kind == Kind::Header).map(|(i, r)| (i, r.title.as_str())).collect();
+        let cur = sections.iter().rposition(|&(i, _)| i <= sel).unwrap_or(0);
+        let first = sections.get(cur).map_or(0, |s| s.0 + 1);
+        let last = sections.get(cur + 1).map_or(data.len(), |s| s.0);
 
-        // the list: a blank line before each heading but the first; `index` is the item each row stands for
+        // the menu on the left, or one line over the settings when the window is narrow
+        let mw = sections.iter().map(|s| width(s.1)).max().unwrap_or(0) + 4;
+        let side = iw >= mw + 44;
+        let (x0, rw) = if side { (mw + 2, iw - mw - 1) } else { (2, iw) };
+        let ls = if side { mw + 4 } else { 3 }; // the screen column each line starts at
+        let mut menu: Vec<String> = vec![];
+        let mut menu_map: Vec<usize> = vec![];
+        if side {
+            for (k, &(i, title)) in sections.iter().enumerate() {
+                // the cursor is here while ↑ ↓ go through the sections; inside one, its name stays lit
+                menu.push(match (k == cur, in_menu) {
+                    (true, true) => format!("{} {}", fg(a, "▌"), fg(a, &bold(title))),
+                    (true, false) => format!("  {}", fg(a, title)),
+                    _ => format!("  {title}"),
+                });
+                menu_map.push(i + 1); // a click opens it at its first row
+            }
+        }
+        let lw = data.iter().filter(|r| r.kind == Kind::Setting).map(|r| width(&r.title)).max().unwrap_or(0) + 3;
+
+        // the section's rows, with what the one under the cursor does right below it
         let (mut lines, mut index) = (Vec::new(), Vec::new());
+        if !side {
+            let names: Vec<String> = sections.iter().enumerate().map(|(k, s)| if k == cur { fg(a, &bold(s.1)) } else { dim(s.1) }).collect();
+            lines.push(names.join(&dim(" · ")));
+            index.push(usize::MAX);
+            lines.push(String::new());
+            index.push(usize::MAX);
+        }
         let mut clicks: Vec<(usize, usize, usize, Action)> = vec![]; // (line, x0, x1, what): each choice is clickable
-        for (i, it) in data.iter().enumerate() {
-            if it.kind == Kind::Header {
-                if i > 0 {
-                    lines.push(String::new());
-                    index.push(i);
-                }
-                lines.push(dim(&bold(&format!("  {}", it.title.to_uppercase()))));
+        let mut at = 0;
+        for (i, it) in data.iter().enumerate().take(last).skip(first) {
+            let on = i == sel && !in_menu;
+            let color = if it.id == "wipe" { RED } else { a };
+            if on {
+                at = lines.len();
+            }
+            if it.kind == Kind::Button {
+                // an action, not a choice: ▸ says it opens or does something
+                let text = format!("▸ {}", it.title);
+                lines.push(if on { format!("{} {}", fg(color, "▌"), fg(color, &bold(&text))) } else if it.id == "wipe" { format!("  {}", fg(RED, &text)) } else { format!("  {text}") });
             } else {
-                let on = i == sel;
-                if it.kind == Kind::Button {
-                    // an action, not a choice: wipe is in red
-                    let color = if it.id == "wipe" { RED } else { a };
-                    lines.push(if on { format!("{} {}", fg(color, "▌"), fg(color, &bold(&it.title))) } else if it.id == "wipe" { format!("  {}", fg(RED, &it.title)) } else { format!("  {}", it.title) });
-                    index.push(i);
-                    continue;
-                }
                 let label = cell(&it.title, lw);
-                let (chips, spans) = chips(&it.id, &it.author, on, iw.saturating_sub(lw + 6), a);
-                for (x0, x1, v) in spans {
-                    clicks.push((lines.len(), 5 + lw + x0, 5 + lw + x1, Action::Choose(it.id.clone(), v)));
-                }
-                lines.push(if on { format!("{} {}{chips}", fg(a, "▌"), fg(a, &bold(&label))) } else { format!("  {label}{chips}") });
+                let all = config::choices(&it.id);
+                let toggle = all.len() == 2 && all.contains(&"on") && all.contains(&"off");
+                let value = if toggle {
+                    // a switch: ● on, ○ off; a click flips it
+                    let yes = it.author == "on";
+                    let text = if yes { format!("● {}", crate::i18n::t("on")) } else { format!("○ {}", crate::i18n::t("off")) };
+                    clicks.push((lines.len(), ls + 2 + lw, ls + 2 + lw + width(&text), Action::Choose(it.id.clone(), if yes { "off" } else { "on" })));
+                    if yes { fg(a, &bold(&text)) } else { dim(&text) }
+                } else if on {
+                    // the one being changed shows every choice
+                    let (chips, spans) = chips(&it.id, &it.author, true, rw.saturating_sub(lw + 4), a);
+                    for (c0, c1, v) in spans {
+                        clicks.push((lines.len(), ls + 2 + lw + c0, ls + 2 + lw + c1, Action::Choose(it.id.clone(), v)));
+                    }
+                    chips
+                } else {
+                    shown(&it.id, &it.author)
+                };
+                lines.push(if on { format!("{} {}{value}", fg(a, "▌"), fg(a, &bold(&label))) } else { format!("  {label}{value}") });
             }
             index.push(i);
-        }
-
-        // the one under the cursor, in full: beside the list when there is room, else under it
-        let list_w = lines.iter().map(|r| width(&plain(r))).max().unwrap_or(0) + 3;
-        let side = iw >= list_w + 36;
-        let pw = if side { iw - list_w - 3 } else { iw.saturating_sub(4) };
-        let mut about = vec![];
-        if let Some(it) = data.get(sel).filter(|it| matches!(it.kind, Kind::Setting | Kind::Button)) {
-            if !side {
-                about.push(dim(&"─".repeat(pw)));
-            }
-            let head = if it.kind == Kind::Button { it.title.trim_end_matches('…').to_string() } else { format!("{} · {}", it.title, crate::i18n::t(&it.author)) };
-            about.push(fg(if it.id == "wipe" { RED } else { a }, &bold(&head)));
-            let hint = it.detail.clone().unwrap_or_default();
-            let mut chars = hint.chars();
-            let hint: String = chars.next().map(|c| c.to_uppercase().chain(chars).collect()).unwrap_or_default(); // capitalised
-            let mut text = crate::lyrics::wrap(&hint, pw);
-            text.truncate(if side { 4 } else { 2 });
-            about.extend(text);
-            // the list scrolls, so the explanation may take what is left after a dozen rows of it
-            let room = if side { l } else { l.saturating_sub(lines.len().min(12)) };
-            if it.id == "fade" && room >= about.len() + 4 + usize::from(!side) {
-                about.push(String::new());
-                about.extend(crossfade_picture(config::fade_secs(&it.author), pw, a));
+            if on {
+                let hint = it.detail.clone().unwrap_or_default();
+                let mut text = crate::lyrics::wrap(&capital(&hint), rw.saturating_sub(6).max(10));
+                text.truncate(3);
+                for t in text {
+                    lines.push(format!("    {}", dim(&t)));
+                    index.push(i);
+                }
+                if it.id == "fade" && l >= last - first + 8 {
+                    for t in crossfade_picture(config::fade_secs(&it.author), rw.saturating_sub(6), a) {
+                        lines.push(format!("    {t}"));
+                        index.push(i);
+                    }
+                }
             }
         }
 
-        // the list scrolls to keep the cursor in sight
-        let n = if side { l } else { l.saturating_sub(about.len() + 1).max(1) };
-        let at = index.iter().position(|&i| i == sel).unwrap_or(0);
-        let top = at.saturating_sub(n / 2).min(lines.len().saturating_sub(n));
-        let mut rows: Vec<String> = lines.iter().skip(top).take(n).map(|r| format!(" {r}")).collect();
-        let mut map: Vec<usize> = index.iter().skip(top).take(n).copied().collect();
-        for (line, x0, x1, what) in clicks.into_iter().filter(|c| c.0 >= top && c.0 < top + n) {
-            g.links.push((what, x0, x1, g.top + line - top));
+        // scrolls only when the section is taller than the window
+        let top = at.saturating_sub(l / 2).min(lines.len().saturating_sub(l));
+        for (line, c0, c1, what) in clicks.into_iter().filter(|c| c.0 >= top && c.0 < top + l) {
+            g.links.push((what, c0, c1, g.top + line - top));
         }
-        if side {
-            rows.resize(l, String::new());
-            for (i, line) in about.into_iter().enumerate() {
-                rows[i] = format!("{}{line}", pad_to(&rows[i], list_w + 1));
-            }
-        } else {
-            rows.resize(l.saturating_sub(about.len()), String::new());
-            rows.extend(about.into_iter().map(|r| format!("  {r}")));
-        }
-        map.resize(rows.len(), usize::MAX);
-        let rows: Vec<String> = rows.into_iter().take(l).map(|r| pad_to(&r, iw)).collect();
+        let mut map: Vec<usize> = index.into_iter().skip(top).take(l).collect();
+        map.resize(l, usize::MAX);
+        let mut rows: Vec<String> = lines.into_iter().skip(top).take(l).collect();
+        rows.resize(l, String::new());
+        let rows: Vec<String> = rows
+            .into_iter()
+            .enumerate()
+            .map(|(r, line)| {
+                let left = if side { pad_to(&format!(" {}", menu.get(r).map_or("", |m| m.as_str())), mw) + &dim("│") } else { String::new() };
+                pad_to(&format!("{left} {line}"), iw)
+            })
+            .collect();
         self.settings = data;
-        g.panes.push(Pane { rows: Some(map), ..pane(PaneId::List, 1, if side { list_w + 1 } else { w }, 0, 0) }); // the explanation is not a row
-        let (t, c) = v.title(tr!("Config · ↑ ↓ choose · ← → change"));
+        if side {
+            menu_map.resize(l, usize::MAX);
+            g.panes.push(Pane { rows: Some(menu_map), ..pane(PaneId::List, 1, mw + 1, 0, 0) });
+        }
+        g.panes.push(Pane { rows: Some(map), ..pane(PaneId::List, x0, w, 0, 0) });
+        let (t, c) = v.title(if in_menu { tr!("Config · ↑ ↓ section · → open it") } else { tr!("Config · ↑ ↓ choose · ← → change · esc sections") });
         frame(&t, c, &rows, w, a)
+    }
+}
+
+// A setting's chosen value as text, with its color dot or border corner.
+fn shown(key: &str, v: &str) -> String {
+    let i = config::choices(key).iter().position(|c| *c == v).unwrap_or(0);
+    format!("{}{}", mark(key, v, i), if key == "language" { capital(v) } else { crate::i18n::t(v).to_string() })
+}
+fn mark(key: &str, c: &str, i: usize) -> String {
+    match key {
+        "accent" => config::accent(c).map_or_else(|| "◐ ".to_string(), |rgb| format!("{} ", fg(readable(rgb), "●"))),
+        "border" => crate::ui::BORDERS.get(i).map_or(String::new(), |b| format!("{}{} ", b.corners[0], b.top.chars().next().unwrap_or(' '))),
+        _ => String::new(),
     }
 }
 
@@ -133,11 +178,7 @@ fn chips(key: &str, chosen: &str, on: bool, room: usize, a: Rgb) -> (String, Vec
         .enumerate()
         .map(|(i, c)| {
             let name = if key == "language" { capital(c) } else { crate::i18n::t(c).to_string() };
-            let mark = match key {
-                "accent" => config::accent(c).map_or_else(|| "◐ ".to_string(), |rgb| format!("{} ", fg(readable(rgb), "●"))),
-                "border" => crate::ui::BORDERS.get(i).map_or(String::new(), |b| format!("{}{} ", b.corners[0], b.top.chars().next().unwrap_or(' '))),
-                _ => String::new(),
-            };
+            let mark = mark(key, c, i);
             let plain_text = format!("{}{name}", plain(&mark));
             let text = if i == at { fg(a, &bold(&format!("[{mark}{name}]"))) } else if on { format!(" {mark}{name} ") } else { dim(&format!(" {} ", plain_text)) };
             (text, plain_text)

@@ -77,9 +77,48 @@ impl App {
         let double = self.last_click.is_some_and(|(p, j, at)| p == pane && j == i && at.elapsed() < Duration::from_millis(450));
         self.last_click = Some((pane, i, Instant::now()));
         self.sel = i;
+        if self.tab == Tab::Config {
+            // the menu is the first pane when it is shown: a click there opens that section, one on a setting goes in
+            self.config_menu = self.geo.panes.len() > 1 && pane == 0;
+            if self.config_menu {
+                return;
+            }
+        }
         if double {
             self.activate();
         }
+    }
+    // Config's two levels: ↑ ↓ go through the sections and → or ⏎ goes into one; inside, ↑ ↓ stay in it and Esc
+    // goes back out. True when the key was taken.
+    fn config_keys(&mut self, code: KeyCode) -> bool {
+        use KeyCode as K;
+        let data = &self.settings;
+        let header = |i: i64| i < 0 || data.get(i as usize).is_none_or(|t| t.kind == Kind::Header);
+        if self.config_menu {
+            let heads: Vec<usize> = data.iter().enumerate().filter(|(_, t)| t.kind == Kind::Header).map(|(i, _)| i).collect();
+            let cur = heads.iter().rposition(|&h| h <= self.sel).unwrap_or(0) as i64;
+            match code {
+                K::Up | K::Char('k') | K::Down | K::Char('j') => {
+                    let dir = if matches!(code, K::Up | K::Char('k')) { -1 } else { 1 };
+                    let to = (cur + dir).clamp(0, heads.len() as i64 - 1) as usize;
+                    self.sel = heads.get(to).map_or(self.sel, |h| h + 1);
+                }
+                K::Right | K::Char('l') | K::Enter => self.config_menu = false,
+                _ => return false,
+            }
+            return true;
+        }
+        match code {
+            K::Up | K::Char('k') | K::Down | K::Char('j') => {
+                let to = self.sel as i64 + if matches!(code, K::Up | K::Char('k')) { -1 } else { 1 };
+                if !header(to) {
+                    self.sel = to as usize;
+                }
+            }
+            K::Esc | K::Backspace | K::Char('h') if self.menu.is_none() => self.config_menu = true,
+            _ => return false,
+        }
+        true
     }
 
     pub(super) fn on_mouse(&mut self, e: MouseEvent) -> bool {
@@ -484,6 +523,9 @@ impl App {
                 return self.start_radio(it);
             }
             _ => {}
+        }
+        if self.tab == Tab::Config && !self.lyrics && !self.full && self.filtered().is_none() && !shift && self.config_keys(code) {
+            return;
         }
         let on_setting = self.cur().is_some_and(|i| i.kind == Kind::Setting);
         if self.tab == Tab::Config && !self.lyrics && !self.full && !shift && on_setting && matches!(code, K::Left | K::Right | K::Enter) {

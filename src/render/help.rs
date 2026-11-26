@@ -42,6 +42,7 @@ impl App {
         }
         let kind = self.kind_at();
         let enter = match kind {
+            _ if self.tab == Tab::Config && self.config_menu => "open",
             Kind::Resume => "resume",
             Kind::Mix => tr!("play mix"),
             Kind::Button if self.tab == Tab::Config => "choose",

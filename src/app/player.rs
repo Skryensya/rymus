@@ -115,6 +115,7 @@ impl App {
             self.settings = config::rows(&self.db);
             if let Some(i) = self.settings.iter().position(|r| r.id == key) {
                 self.sel = i;
+                self.config_menu = false;
             }
         }
     }

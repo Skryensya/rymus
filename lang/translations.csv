@@ -717,3 +717,6 @@ Updates,Actualizaciones
 "a song's file is ready (its path in ""path""; its cover, thumbnail and lyrics files in ""cover"", ""thumbnail"" and ""lyrics"", null when there are none)","el archivo de una canción está listo (su ruta en ""path""; su portada, miniatura y letra en ""cover"", ""thumbnail"" y ""lyrics"", null si no hay)"
 Visualizer style: {a},Estilo del visualizador: {a}
 visualizer style,estilo del visualizador
+General,General
+Config · ↑ ↓ section · → open it,Ajustes · ↑ ↓ sección · → abrirla
+Config · ↑ ↓ choose · ← → change · esc sections,Ajustes · ↑ ↓ elegir · ← → cambiar · esc secciones

@@ -13,23 +13,23 @@ pub struct Setting {
 }
 
 pub const SETTINGS: [Setting; 17] = [
-    Setting { key: "language", label: "Language", choices: &[], hint: "the language of the app, rymus help and the manual; add one with rymus translations (see the manual)", group: "Language" },
     Setting { key: "fade", label: "Crossfade", choices: &["off", "2 s", "4 s", "6 s", "8 s", "12 s"], hint: "the end of each song plays over the start of the next one, one fading out while the other fades in", group: "Sound" },
     Setting { key: "normalize", label: "Even out loudness", choices: &["off", "on"], hint: "quiet and loud songs play at a similar level", group: "Sound" },
     Setting { key: "channels", label: "Channels", choices: &["stereo", "mono"], hint: "mono plays the same mix of left and right on both sides, for one earbud or one good ear", group: "Sound" },
-    Setting { key: "quality", label: "Audio quality", choices: &["best", "data saver"], hint: "data saver streams the smallest audio there is, for slow or metered connections", group: "Streaming" },
-    Setting { key: "pixel", label: "Pixel art covers", choices: &["off", "on"], hint: "draw every cover as colored blocks, even where the terminal can show the image", group: "Screen" },
-    Setting { key: "wave", label: "Visualizer", choices: &["on", "off"], hint: "the moving spectrum in the player (also W)", group: "Screen" },
-    Setting { key: "vizstyle", label: "Visualizer style", choices: &["dots", "bars", "line", "mirror"], hint: "how the spectrum is drawn: dots rising, solid bars, a line of dots, or a mirror growing from the middle (also w, one after another)", group: "Screen" },
+    Setting { key: "quality", label: "Audio quality", choices: &["best", "data saver"], hint: "data saver streams the smallest audio there is, for slow or metered connections", group: "Sound" },
+    Setting { key: "outputpause", label: "Pause on output change", choices: &["on", "off"], hint: "pause when headphones are unplugged or the audio output changes", group: "Sound" },
     Setting { key: "mode", label: "Mode", choices: &["dark", "light"], hint: "match your terminal's background: every color is chosen to read well on it, the accent included", group: "Look" },
     Setting { key: "accent", label: "Color", choices: &["from cover", "red", "coral", "orange", "yellow", "lime", "green", "teal", "cyan", "blue", "purple", "magenta", "pink", "white"], hint: "the color of the frames, the selection and the player: taken from what plays, or always the same", group: "Look" },
     Setting { key: "player", label: "Player", choices: &["bottom", "top"], hint: "where the player sits: under the lists, or above them", group: "Look" },
     Setting { key: "border", label: "Borders", choices: &["rounded", "square", "heavy", "double", "dashed", "dotted", "deco", "block", "ascii", "ornate"], hint: "how the frames are drawn: lines, dashes, dots, blocks, or ornate scrolls in plain ASCII", group: "Look" },
-    Setting { key: "updates", label: "Check for updates", choices: &["on", "off"], hint: "once a day rymus asks GitHub for the name of its latest release, and tells you when there is a newer one; nothing about you is sent", group: "Updates" },
-    Setting { key: "outputpause", label: "Pause on output change", choices: &["on", "off"], hint: "pause when headphones are unplugged or the audio output changes", group: "Output" },
+    Setting { key: "pixel", label: "Pixel art covers", choices: &["off", "on"], hint: "draw every cover as colored blocks, even where the terminal can show the image", group: "Screen" },
+    Setting { key: "wave", label: "Visualizer", choices: &["on", "off"], hint: "the moving spectrum in the player (also W)", group: "Screen" },
+    Setting { key: "vizstyle", label: "Visualizer style", choices: &["dots", "bars", "line", "mirror"], hint: "how the spectrum is drawn: dots rising, solid bars, a line of dots, or a mirror growing from the middle (also w, one after another)", group: "Screen" },
     Setting { key: "download", label: "Keep offline", choices: &["off", "liked songs"], hint: "download every song you like from now on; it plays from the file, with or without network (b downloads any song)", group: "Downloads" },
     Setting { key: "dlformat", label: "File format", choices: &["mp3", "m4a", "opus", "original"], hint: "what downloaded songs are saved as; original keeps what YouTube sends, without converting", group: "Downloads" },
     Setting { key: "library", label: "Your own music", choices: &["off", "on"], hint: "the songs already in the folder, yours from anywhere (mp3, flac, m4a…), show in Library and play from disk", group: "Downloads" },
+    Setting { key: "language", label: "Language", choices: &[], hint: "the language of the app, rymus help and the manual; add one with rymus translations (see the manual)", group: "General" },
+    Setting { key: "updates", label: "Check for updates", choices: &["on", "off"], hint: "once a day rymus asks GitHub for the name of its latest release, and tells you when there is a newer one; nothing about you is sent", group: "General" },
 ];
 
 // Most settings offer a fixed list; the language offers what the translations have.
@@ -72,15 +72,6 @@ pub fn rows(db: &Db) -> Vec<Item> {
         if i == 0 || SETTINGS[i - 1].group != s.group {
             rows.push(Item { kind: Kind::Header, title: t(s.group).into(), ..Default::default() });
         }
-        if s.group == "Downloads" {
-            // they live in their own window (B), like the equalizer's bands
-            if s.key == "download" {
-                let folder = db.get_setting("dlfolder").filter(|f| !f.is_empty()).unwrap_or_else(|| "~/Music/rymus".into());
-                let hint = tr!("keep songs as files, read your own music, see the room it takes and free some (also B from anywhere)");
-                rows.push(Item { kind: Kind::Button, id: "downloads".into(), title: tr!("Downloads and your music: {folder}…", folder = folder), detail: Some(hint.into()), ..Default::default() });
-            }
-            continue;
-        }
         rows.push(Item { kind: Kind::Setting, id: s.key.into(), title: t(s.label).into(), author: value(db, s.key).into(), detail: Some(t(s.hint).into()), ..Default::default() });
         if s.key == "updates" {
             let latest = db.get_setting("update_latest").unwrap_or_default();
@@ -92,14 +83,19 @@ pub fn rows(db: &Db) -> Vec<Item> {
             let hint = tr!("downloads the new rymus, checks it, and puts it in place of this one; Cmd Shift R then restarts into it");
             rows.push(Item { kind: Kind::Button, id: "update".into(), title, detail: Some(hint.into()), ..Default::default() });
         }
+        if s.key == "library" {
+            // the folder, the room it takes and freeing some live in their own window (B)
+            let folder = db.get_setting("dlfolder").filter(|f| !f.is_empty()).unwrap_or_else(|| "~/Music/rymus".into());
+            let hint = tr!("keep songs as files, read your own music, see the room it takes and free some (also B from anywhere)");
+            rows.push(Item { kind: Kind::Button, id: "downloads".into(), title: tr!("Downloads and your music: {folder}…", folder = folder), detail: Some(hint.into()), ..Default::default() });
+        }
         if s.key == "channels" {
             let title = tr!("Equalizer: {a}…", a = crate::i18n::any(&db.get_setting("eq").unwrap_or_else(|| "Flat".into())));
             let hint = tr!("ten bands, ready made profiles and your own (also E from anywhere)");
             rows.push(Item { kind: Kind::Button, id: "eq".into(), title, detail: Some(hint.into()), ..Default::default() });
         }
     }
-    // what you do with all of it at once: each asks first
-    rows.push(Item { kind: Kind::Header, title: tr!("Data").into(), ..Default::default() });
+    // what you do with all of it at once, at the end of General: each asks first
     for (id, title, hint) in [
         ("export", tr!("Export your data…"), tr!("everything (likes, playlists, history, settings) as CSV files in a new folder: open them in any spreadsheet, keep them, or take them to another computer")),
         ("import", tr!("Import data…"), tr!("replace everything here with an exported folder: what is here now is lost, so export it first if you want to keep it")),
@@ -178,8 +174,8 @@ mod tests {
         db.set_setting("quality", "bogus");
         assert_eq!(value(&db, "quality"), "best");
         let rows = rows(&db);
-        assert_eq!(rows.iter().filter(|r| r.kind == Kind::Setting).count(), SETTINGS.iter().filter(|s| s.group != "Downloads").count());
-        assert_eq!(rows.iter().filter(|r| r.kind == Kind::Header).map(|r| r.title.as_str()).collect::<Vec<_>>(), ["Language", "Sound", "Streaming", "Screen", "Look", "Updates", "Output", "Downloads", "Data"]);
+        assert_eq!(rows.iter().filter(|r| r.kind == Kind::Setting).count(), SETTINGS.len());
+        assert_eq!(rows.iter().filter(|r| r.kind == Kind::Header).map(|r| r.title.as_str()).collect::<Vec<_>>(), ["Sound", "Look", "Screen", "Downloads", "General"]);
     }
 
     #[test]

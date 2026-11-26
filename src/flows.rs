@@ -551,8 +551,9 @@ fn open_config(ui: &mut Ui) {
         ui.key(KeyCode::Tab); // Home → Playlists → Liked → Library → Queue → History → Stats → Config
     }
     assert_eq!(ui.app.tab, Tab::Config);
-    assert_eq!(ui.app.cur().unwrap().id, "language", "the language comes first");
-    ui.key(KeyCode::Down); // onto Crossfade, where these tests start
+    assert!(ui.app.config_menu, "it opens on its sections");
+    assert_eq!(ui.app.cur().unwrap().id, "fade", "Sound comes first, Crossfade at its top: where these tests start");
+    ui.key(KeyCode::Right); // into Sound
 }
 
 #[test]
@@ -582,8 +583,16 @@ fn the_config_tab_changes_settings_saves_them_and_tells_the_player() {
     assert!(ui.told().contains(&json!(["set_property", "ytdl-format", "worstaudio/worst"])));
     ui.ch('W'); // the visualizer key and the Config row are the same setting
     assert_eq!(ui.app.db.get_setting("wave").as_deref(), Some("off"));
-    let wave = ui.screen().into_iter().find(|l| l.contains("Visualizer") && l.contains('[')).unwrap();
-    assert!(wave.contains("[off]"), "{wave}");
+    assert_eq!(ui.app.settings.iter().find(|r| r.id == "wave").unwrap().author, "off", "and its row says so");
+    ui.ch('w'); // off: w turns it back on, as it was
+    assert_eq!((ui.app.db.get_setting("wave").as_deref(), crate::config::value(&ui.app.db, "vizstyle")), (Some("on"), "dots"));
+    ui.ch('w'); // on: the next style
+    assert_eq!((crate::config::value(&ui.app.db, "vizstyle"), ui.app.viz_style), ("bars", 1));
+    assert_eq!(ui.app.settings.iter().find(|r| r.id == "vizstyle").unwrap().author, "bars", "and its row says so");
+    for _ in 0..3 {
+        ui.ch('w');
+    }
+    assert_eq!(crate::config::value(&ui.app.db, "vizstyle"), "dots", "around again after mirror");
 }
 
 #[test]
@@ -606,17 +615,32 @@ fn the_config_tab_shows_every_choice_and_explains_the_one_you_are_on() {
     let mut ui = Ui::new();
     ui.size = (110, 54);
     open_config(&mut ui);
-    for heading in ["SOUND", "STREAMING", "SCREEN", "LOOK", "OUTPUT"] {
-        assert!(ui.shows(heading), "{heading}\n{}", ui.screen().join("\n"));
+    for section in ["Sound", "Look", "Screen", "Downloads", "General"] {
+        assert!(ui.shows(section), "{section}\n{}", ui.screen().join("\n"));
     }
-    assert!(ui.shows("[off]") && ui.shows(" 12 s "), "every choice is in view");
-    assert!(ui.shows("Crossfade · off") && ui.shows("no overlap"), "the setting under the cursor, explained\n{}", ui.screen().join("\n"));
+    assert!(!ui.shows("Pixel art covers"), "only the section holding the cursor is shown");
+    assert!(ui.shows("[off]") && ui.shows(" 12 s "), "every choice of the one being changed is in view");
+    assert!(ui.shows("The end of each song plays over"), "and what it does, right under it\n{}", ui.screen().join("\n"));
+    assert!(ui.shows("no overlap") && ui.shows("○ off") && ui.shows("▸ Equalizer"), "switches and windows look like what they are");
     assert!(!ui.shows("Preview"), "the player below does not preview a setting");
     ui.key(KeyCode::Right);
     ui.key(KeyCode::Right);
     assert!(ui.shows("[4 s]") && ui.shows("4 s together"), "{}", ui.screen().join("\n"));
     ui.key(KeyCode::Down);
-    assert!(ui.shows("Even out loudness · off") && !ui.shows("together"));
+    assert!(ui.shows("Quiet and loud songs") && !ui.shows("together") && !ui.shows(" 12 s "), "{}", ui.screen().join("\n"));
+    for _ in 0..9 {
+        ui.key(KeyCode::Down); // to the end of Sound, and no further
+    }
+    assert_eq!(ui.app.cur().unwrap().id, "outputpause", "inside a section ↑ ↓ stay in it");
+    ui.key(KeyCode::Esc); // back to the sections
+    assert!(ui.app.config_menu && ui.app.tab == Tab::Config);
+    ui.key(KeyCode::Down);
+    assert!(ui.shows("▌ Look") && ui.shows("Mode") && !ui.shows("Even out loudness"), "one key to the next section, shown at once\n{}", ui.screen().join("\n"));
+    ui.key(KeyCode::Down);
+    ui.key(KeyCode::Down);
+    ui.key(KeyCode::Down);
+    ui.key(KeyCode::Enter);
+    assert!(!ui.app.config_menu && ui.shows("Delete all my data"), "General, at the end, in four keys\n{}", ui.screen().join("\n"));
 }
 
 #[test]
@@ -705,7 +729,8 @@ fn a_narrow_config_shows_only_the_chosen_value() {
     for _ in 0..5 {
         ui.key(KeyCode::Right);
     }
-    assert!(ui.shows("[12 s]") && ui.shows("‹") && !ui.shows(" off "), "and ← → still change it, the line following: {}", ui.screen().join("\n"));
+    let line = ui.screen().into_iter().find(|l| l.contains("[12 s]")).unwrap_or_default();
+    assert!(line.contains('‹') && !line.contains("off"), "and ← → still change it, the line following: {}", ui.screen().join("\n"));
 }
 
 // ---------- albums ----------
@@ -814,9 +839,11 @@ fn a_real_album_cover_and_the_players_live_side_by_side_until_pixel_art_is_on() 
     ui.key(KeyCode::Esc);
     ui.set_tab_home();
     open_config(&mut ui);
-    for _ in 0..5 {
-        ui.key(KeyCode::Down);
-    }
+    ui.key(KeyCode::Esc);
+    ui.key(KeyCode::Down);
+    ui.key(KeyCode::Down); // Screen
+    ui.key(KeyCode::Right);
+    assert_eq!(ui.app.cur().unwrap().id, "pixel");
     ui.drawn();
     ui.key(KeyCode::Right); // Pixel art covers: on
     assert!(!ui.app.kitty, "every image is drawn with blocks now");
@@ -1583,6 +1610,7 @@ fn the_queue_names_the_album_and_it_opens() {
 fn mono_is_switched_without_replacing_a_filter() {
     let mut ui = Ui::new();
     ui.app.set_tab(Tab::Config);
+    ui.key(KeyCode::Right); // into Sound
     while ui.app.cur().is_some_and(|i| i.id != "channels") {
         ui.key(KeyCode::Down);
     }
@@ -1603,6 +1631,7 @@ fn the_equalizer_opens_from_config_as_a_window_and_resets_to_its_origin() {
     let mut ui = Ui::new();
     ui.size = (120, 36);
     ui.app.set_tab(Tab::Config);
+    ui.key(KeyCode::Right); // into Sound
     while ui.app.cur().is_some_and(|i| i.id != "eq") {
         ui.key(KeyCode::Down);
     }
@@ -1801,12 +1830,16 @@ fn keeping_likes_offline_downloads_each_like() {
 fn the_language_is_chosen_in_config_and_kept() {
     let mut ui = Ui::new();
     ui.app.set_tab(Tab::Config);
+    for _ in 0..4 {
+        ui.key(KeyCode::Down); // to General
+    }
+    ui.key(KeyCode::Right); // into it: the language is first
     assert_eq!(ui.app.cur().unwrap().id, "language");
     ui.key(KeyCode::Right);
-    assert!(ui.shows("Inicio") && ui.shows("Ajustes") && ui.shows("[Español]") && ui.shows("[no]") && ui.shows("Fundido"), "{}", ui.screen().join("\n"));
+    assert!(ui.shows("Inicio") && ui.shows("Ajustes") && ui.shows("[Español]") && ui.shows("Sonido"), "{}", ui.screen().join("\n"));
     assert!(crate::manual::help().contains("Teclas (dentro de rymus)"));
     ui.key(KeyCode::Left);
-    assert!(ui.shows("Home") && ui.shows("Crossfade"));
+    assert!(ui.shows("Home") && ui.shows("Sound"));
     let mut next = Ui::with(|db| db.set_setting("language", "español"));
     next.app.start();
     assert!(next.shows("Inicio"), "{}", next.screen().join("\n"));
@@ -1818,10 +1851,20 @@ fn a_choice_in_config_is_clicked() {
     let mut ui = Ui::new();
     ui.size = (120, 40);
     ui.app.set_tab(Tab::Config);
+    let (x, y) = ui.at("Channels");
+    ui.click(x, y); // the row first: its choices open
+    assert_eq!(ui.app.cur().unwrap().id, "channels");
     let (x, y) = ui.at(" mono ");
     ui.click(x + 1, y);
     assert_eq!(ui.app.db.get_setting("channels").as_deref(), Some("mono"));
     assert!(ui.shows("[mono]"));
+    let (x, y) = ui.at("○ off"); // Even out loudness, a switch
+    ui.click(x, y);
+    assert_eq!(ui.app.db.get_setting("normalize").as_deref(), Some("on"));
+    let (x, y) = ui.at("Look"); // a section in the menu
+    ui.click(x, y);
+    assert_eq!(ui.app.cur().unwrap().id, "mode", "opens at its first setting");
+    assert!(ui.app.config_menu, "with the cursor still on the sections");
 }
 
 #[test]
@@ -1908,6 +1951,7 @@ fn to_data_row(ui: &mut Ui, id: &str) {
     assert_eq!(ui.app.tab, Tab::Config);
     let at = ui.app.settings.iter().position(|r| r.id == id).expect("a Data row");
     ui.app.sel = at;
+    ui.app.config_menu = false; // inside its section
 }
 
 #[test]

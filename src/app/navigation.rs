@@ -46,7 +46,10 @@ impl App {
             Tab::Home => self.load_home(),
             Tab::Stats => self.load_stats(),
             Tab::Playlists => self.load_playlists(),
-            Tab::Config => self.settings = config::rows(&self.db),
+            Tab::Config => {
+                self.settings = config::rows(&self.db);
+                self.config_menu = true; // it opens on its sections
+            }
             _ => {}
         }
         self.sel = match tab {

@@ -474,6 +474,7 @@ pub struct App {
     apos: Option<(f64, Instant)>,
     resumed: Instant, // when playback last went on: the stall check counts from there too
     reloaded: bool,   // the audio output was reopened for this stall
+    pub config_menu: bool, // Config: ↑ ↓ move through its sections (true) or through one section's settings
     levels: viz::Levels,
     pub bands: [f64; BANDS],
     pub energy: f64, // how loud it really is, for the trip visualizer
@@ -524,7 +525,7 @@ impl App {
             naming: None, playlists: vec![], playlists_sel: 0, playlist_views: HashMap::new(), importing: false,
             queue: vec![], pos: -1, paused: false, sounding: None, repeat: Repeat::Off, loading: false, time: 0, dur: 0.0, vol, play_id: None,
             direct: HashSet::new(), streams: HashMap::new(), resolving: HashSet::new(), session, likes, dislikes,
-            wave, accent: None, player_top: false, viz_style: 0, fade: 0.0, tail: None, fading: None, crossing: false, faded: false, format: config::format("best"), settings: vec![], apos: None, resumed: now, reloaded: false, levels: Default::default(), bands: [0.0; BANDS], energy: 0.0, trip_on: false, trip: Show::default(), trip_lyrics, trip_t: 0.0, trip_at: now,
+            wave, accent: None, player_top: false, viz_style: 0, fade: 0.0, tail: None, fading: None, crossing: false, faded: false, format: config::format("best"), settings: vec![], apos: None, resumed: now, reloaded: false, config_menu: true, levels: Default::default(), bands: [0.0; BANDS], energy: 0.0, trip_on: false, trip: Show::default(), trip_lyrics, trip_t: 0.0, trip_at: now,
             covers: HashMap::new(), rasters: HashMap::new(), kitty: cover::supported(), shown: String::new(), shown_head: String::new(), want: String::new(), want_at: now,
             redraw_at: None, theme: Default::default(), lyric_cache: HashMap::new(),
             mq: Default::default(), geo: Default::default(), drag: false, last_click: None, last_seek: now, last_wheel: now,
