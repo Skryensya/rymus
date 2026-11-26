@@ -113,6 +113,10 @@ Run it again after updating.
 
 ## Keys
 
+`?` shows them all, grouped, from anywhere:
+
+![The ? page: every key, grouped](docs/keys.png)
+
 | Key | Action |
 |---|---|
 | **Moving** | |
@@ -175,6 +179,10 @@ Run it again after updating.
 
 **Lyrics** come from LRCLIB and are kept on disk, so a song you play again has them at once, even offline. All of them together stay under 10 MB (about 3 000 songs); past that, the ones you used longest ago are dropped. "No lyrics" is asked again after a month, since LRCLIB keeps adding them. With `y` you read and scroll them; synced lyrics highlight the line being sung. With `Y` they become karaoke: the line being sung in big letters (accents included; `f` cycles dots, solid and blocks, remembered, and a line too long for the chosen style is drawn in dots), the one before and the one after small, and four dots under it that start empty and fill one by one, in equal steps, so they are all full just before the next line. Lines in scripts the big font does not have are shown as plain text.
 
+## Updates
+
+Once a day rymus asks GitHub for the name of its latest release (nothing about you is sent) and, when there is a newer one, says so with a note. *Config → Updates* installs it (or `rymus update` in a terminal): the new binary is downloaded, checked against its sha256, and put in place of this one; `Cmd Shift R` then restarts into it without stopping the music. *Check for updates: off* never asks.
+
 ## Media keys
 
 The keyboard's play/pause, next and previous keys, AirPods, and the system's Now Playing work with rymus, through mpv: on macOS out of the box, on Linux once the [mpv-mpris](https://github.com/hoyon/mpv-mpris) plugin is installed. They keep working after `Q`, while the music plays on.
@@ -206,7 +214,7 @@ Liking an album also saves it in **Library**, with its cover beside the list. `F
 
 `b` downloads the highlighted song (every song, from an album's Play and Shuffle buttons), or what plays; `m` → *Download* does the same. A downloaded song is marked `↓` and plays from its file, with or without network; `m` → *Delete download* removes it. Downloading needs `yt-dlp` and `ffmpeg`; what you may download and keep is up to you and YouTube's terms.
 
-**The Downloads window** (`B` from anywhere, or *Config → Downloads and your music*) sits over the screen like the equalizer. On top: the folder, the room it takes, how many songs are downloaded (and of your own), and how many are still on their way. Then, changed with `← →`: *Keep offline* (`liked songs` downloads every new like), *File format* (mp3, m4a, opus or original) and *Your own music*. Then, run with `⏎`: *Change folder…* (`~/Music/rymus` unless you choose another), *Download what plays* (also `b` in the window), *Download all liked songs* and *Free up space…*. Files are named `Artist - Title [id].mp3`.
+**The Downloads window** (`B` from anywhere, or *Config → Downloads and your music*) sits over the screen like the equalizer. On top: the folder, the room it takes, how many songs are downloaded (and of your own), and how many are still on their way. Then, changed with `← →`: *Keep offline* (`liked songs` downloads every new like), *File format* (mp3, m4a, opus or original) and *Your own music*. Then, run with `⏎`: *Change folder…* (`~/Music/rymus` unless you choose another), *Download what plays* (also `b` in the window), *Download all liked songs* and *Free up space…*. Files are named `Artist - Title [id].mp3`, and each comes with what other players read beside it: its lyrics (`… [id].lrc` when synced, `.txt` when not), its cover (`… [id].jpg`, large) and a thumbnail (`… [id].thumb.jpg`). Songs downloaded before get theirs in the background. A song on disk shows the lyrics from its file, without network.
 
 **Your own music.** With *Your own music: on*, rymus reads the same folder (subfolders too): every audio file it did not download (mp3, flac, m4a, opus, ogg, wav…) shows in **Library → Your music** and plays from disk, with the EQ and crossfade. Name files `Artist - Title.flac` and the artist shows; the folder becomes the album.
 
@@ -244,9 +252,9 @@ Run your own commands on what happens. Put an executable in `~/.rymus/hooks/` na
 | `playlist-remove` | you remove a song from a playlist | `playlist` |
 | `playing` | a song starts | |
 | `download-started` | a song starts downloading | `folder`, `format`, `waiting` (songs after it) |
-| `downloaded` | a song's file is ready | `path`, `format` |
+| `downloaded` | a song's file is ready | `path`, `format`, and the files saved with it: `cover` (large), `thumbnail`, `lyrics` (each `null` when there is none) |
 | `download-failed` | a download did not work | `error` (yt-dlp's last line) |
-| `download-deleted` | a downloaded file is deleted | `path`, `bytes`, `reason`: `you` (`m` → *Delete download*) or `free up space` |
+| `download-deleted` | a downloaded file is deleted | `path`, `files` (the song and its cover, thumbnail and lyrics, all deleted), `bytes`, `reason`: `you` (`m` → *Delete download*) or `free up space` |
 | `played` | it reaches its end | `seconds`, `duration` |
 | `skipped` | you move on before its end | `seconds`, `duration` |
 
@@ -272,11 +280,12 @@ Then `chmod +x ~/.rymus/hooks/liked`. Hooks run in the background and are not st
 
 ## Your data
 
-Likes, history, playlists and settings stay in `~/.rymus/rymus.db` (`YM_DB` points it elsewhere). In Config, under **Data**: *Export your data…* writes all of it as CSV files (one per table: tracks, likes, plays, playlists…) in a new folder any spreadsheet opens, *Import data…* replaces everything with such a folder, and *Wipe all data…* deletes it all (you type `delete all my data` to confirm); rymus then starts empty, as on its first run. The services used receive only what a request needs:
+Likes, history, playlists and settings stay in `~/.rymus/rymus.db` (`YM_DB` points it elsewhere). In Config, under **Data**: *Export your data…* writes all of it as CSV files (one per table: tracks, likes, plays, playlists…) in a new folder any spreadsheet opens, *Import data…* replaces everything with such a folder, and *Delete all my data…* erases it all (you type `delete all my data` to confirm); rymus then starts empty, as on its first run. The services used receive only what a request needs:
 
 - **YouTube Music**: your searches and the songs you play or ask recommendations for
 - **Spotify**: the id of a playlist you paste
-- **LRCLIB**: title, artist, album and length, when you open lyrics
+- **LRCLIB**: title, artist, album and length, when you open lyrics or download a song
+- **GitHub**: nothing but the request for the latest release's name, once a day (off in *Config → Updates*), and the download when you update
 - **MusicBrainz / ListenBrainz**: artist names and ids, for Discover and radio
 
 ---

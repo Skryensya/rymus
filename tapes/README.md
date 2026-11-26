@@ -14,6 +14,7 @@ for t in tapes/*.tape; do [ "$t" = tapes/style.tape ] || vhs "$t"; done   # all 
   your own likes or history. `demo.sh history` adds a made-up month of listening (`history.sql`).
 - The searches are real, so YouTube Music's answers can change; if a tape lands on the wrong row, adjust its
   `Down` count.
+- `keys.tape` saves the still of the `?` page, `docs/keys.png`.
 - `light.tape` saves the light-mode stills `docs/look-light*.png`, on a light terminal theme. `DEMO_SET="mode=light accent=teal"` before `tapes/demo.sh` starts with those settings.
 - `looks.tape` also saves the three stills `docs/look-*.png` (VHS `Screenshot`).
 - `trip.tape` is not in the README: the trip moves too much for a small GIF.

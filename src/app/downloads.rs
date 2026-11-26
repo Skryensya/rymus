@@ -61,6 +61,41 @@ fn save_lyrics(t: &Item, file: &Path) {
     let _ = (t, file); // no network in tests: the file writing has tests of its own (lyrics.rs)
 }
 
+// The cover beside a downloaded song: "Song.jpg" large (1200 px when YouTube has it) and "Song.thumb.jpg", the
+// small one lists use. The extension follows what was sent (jpg, png or webp). Their paths, where saved.
+pub(super) fn save_covers(t: &Item, file: &Path) -> (Option<PathBuf>, Option<PathBuf>) {
+    #[cfg(test)]
+    {
+        let _ = (t, file); // no network in tests
+        (None, None)
+    }
+    #[cfg(not(test))]
+    {
+        if t.cover.is_empty() {
+            return (None, None);
+        }
+        let (dir, stem) = (file.parent().unwrap_or(Path::new(".")), file.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default());
+        let get = |url: &str, name: &dyn Fn(&str) -> String| -> Option<PathBuf> {
+            use std::io::Read;
+            let mut bytes = Vec::new();
+            crate::yt::agent().get(url).call().ok()?.into_reader().take(20_000_000).read_to_end(&mut bytes).ok()?;
+            let ext = match bytes.get(..12)? {
+                [0x89, b'P', b'N', b'G', ..] => "png",
+                [b'R', b'I', b'F', b'F', _, _, _, _, b'W', b'E', b'B', b'P'] => "webp",
+                [0xFF, 0xD8, ..] => "jpg",
+                _ => return None, // not an image
+            };
+            let to = dir.join(name(ext));
+            std::fs::write(&to, bytes).ok().map(|_| to)
+        };
+        let large = crate::cover::large(&t.cover).unwrap_or_else(|| t.cover.clone());
+        (get(&large, &|ext| format!("{stem}.{ext}")), get(&t.cover, &|ext| format!("{stem}.thumb.{ext}")))
+    }
+}
+fn has_cover(file: &Path) -> bool {
+    ["jpg", "png", "webp"].iter().any(|ext| file.with_extension(ext).is_file())
+}
+
 // Runs yt-dlp; the file it wrote, or why not.
 fn fetch(t: &Item, folder: &Path, format: &str) -> Result<PathBuf, String> {
     std::fs::create_dir_all(folder).map_err(|e| tr!("cannot make {a}: {e}", a = folder.display(), e = e))?;
@@ -99,9 +134,19 @@ impl App {
     pub(super) fn load_downloads(&mut self) {
         self.downloads.files = self.db.downloads().into_iter().filter(|(_, f)| f.is_file()).collect();
         // songs downloaded before lyrics were saved with them get theirs, one at a time, in the background
-        let missing: Vec<(Item, PathBuf)> = self.db.download_files().into_iter().filter(|(_, f)| f.is_file() && !crate::lyrics::has_beside(f)).collect();
+        // songs downloaded before their lyrics and cover were saved with them get them, one at a time, in the background
+        let missing: Vec<(Item, PathBuf)> = self.db.download_files().into_iter().filter(|(_, f)| f.is_file() && (!crate::lyrics::has_beside(f) || !has_cover(f))).collect();
         if !missing.is_empty() {
-            std::thread::spawn(move || missing.iter().for_each(|(t, f)| save_lyrics(t, f)));
+            std::thread::spawn(move || {
+                for (t, f) in &missing {
+                    if !crate::lyrics::has_beside(f) {
+                        save_lyrics(t, f);
+                    }
+                    if !has_cover(f) {
+                        save_covers(t, f);
+                    }
+                }
+            });
         }
     }
     pub fn downloaded(&self, id: &str) -> bool {
@@ -163,16 +208,22 @@ impl App {
         self.hook("download-started", &t, json!({"folder": folder.to_string_lossy(), "format": format, "waiting": self.downloads.queue.len()}));
         std::thread::spawn(move || {
             let got = fetch(&t, &folder, format);
-            if let Ok(file) = &got {
+            // what goes with the song: its lyrics and its cover, both beside it
+            let extras = got.as_ref().ok().map(|file| {
                 save_lyrics(&t, file);
-            }
+                let (cover, thumbnail) = save_covers(&t, file);
+                let lyrics = ["lrc", "txt"].iter().map(|ext| file.with_extension(ext)).find(|f| f.is_file());
+                (cover, thumbnail, lyrics)
+            });
             let _ = tx.send(Msg::Apply(Box::new(move |app: &mut App| {
                 app.downloads.current = None;
                 match got {
                     Ok(file) => {
                         app.db.add_download(&t, &file);
                         app.downloads.files.insert(t.id.clone(), file.clone());
-                        app.hook("downloaded", &t, json!({"path": file.to_string_lossy(), "format": format}));
+                        let (cover, thumbnail, lyrics) = extras.unwrap_or_default();
+                        let path = |f: Option<PathBuf>| f.map(|f| f.to_string_lossy().into_owned());
+                        app.hook("downloaded", &t, json!({"path": file.to_string_lossy(), "format": format, "cover": path(cover), "thumbnail": path(thumbnail), "lyrics": path(lyrics)}));
                         let left = app.downloads.queue.len();
                         let more = if left > 0 { tr!(" · {left} to go", left = left) } else { String::new() };
                         app.set_note(tr!("Downloaded: {a}{more}", a = t.title, more = more));
@@ -203,10 +254,16 @@ impl App {
         let song = self.db.downloaded_tracks().into_iter().find(|t| t.id == id);
         let mut bytes = 0;
         if let Some(file) = self.downloads.files.remove(id) {
-            bytes = std::fs::metadata(&file).map_or(0, |m| m.len());
-            let _ = std::fs::remove_file(&file);
+            // the song and what was saved with it: lyrics, cover, thumbnail
+            let mut gone = vec![file.clone()];
+            gone.extend(["lrc", "txt", "jpg", "png", "webp", "thumb.jpg", "thumb.png", "thumb.webp"].iter().map(|ext| file.with_extension(ext)).filter(|f| f.is_file()));
+            for f in &gone {
+                bytes += std::fs::metadata(f).map_or(0, |m| m.len());
+                let _ = std::fs::remove_file(f);
+            }
             if let Some(t) = &song {
-                self.hook("download-deleted", t, json!({"path": file.to_string_lossy(), "reason": reason, "bytes": bytes}));
+                let files: Vec<String> = gone.iter().map(|f| f.to_string_lossy().into_owned()).collect();
+                self.hook("download-deleted", t, json!({"path": file.to_string_lossy(), "reason": reason, "bytes": bytes, "files": files}));
             }
         }
         self.db.drop_download(id);

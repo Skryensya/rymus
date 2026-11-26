@@ -38,6 +38,7 @@ mod charts; //   the Stats charts
 mod bigtext; //  the big pixel letters of karaoke
 mod viz; //      the spectrum analyser (inside mpv's audio filter)
 mod trip; //     the old smoke, one of the trip's scenes
+mod update; //   new versions: checked once a day, installed by `rymus update`
 mod scenes; //   the full screen visualizer (V): its scenes, what they hear, how they change
 
 #[cfg(test)]
@@ -172,6 +173,10 @@ fn run() -> Result<(), String> {
             return Ok(());
         }
         Some("ctl") => return ctl(&args.next().unwrap_or_default()),
+        Some("update") => {
+            language();
+            return update::run();
+        }
         Some("translations") => {
             language();
             let _ = std::io::stdout().write_all(i18n::export().as_bytes());
@@ -236,6 +241,7 @@ fn run() -> Result<(), String> {
         app.reattach(left);
     }
     app.start();
+    app.check_for_update();
     // after a restart (Cmd Shift R), back on the tab it was on
     if let Some(i) = app.db.get_setting("restart_tab").and_then(|v| v.parse::<usize>().ok()) {
         app.db.set_setting("restart_tab", "");

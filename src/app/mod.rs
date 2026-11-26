@@ -83,6 +83,7 @@ pub enum Msg {
 #[derive(Clone)]
 pub enum Action {
     Data(String), // export, import or wipe (Config > Data)
+    Update,       // Config's Update row: check, and install when there is a newer rymus
     OpenAlbum(Item),
     OpenArtist(Item),
     GoArtist(String),

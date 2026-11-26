@@ -256,6 +256,7 @@ impl App {
             }
             Action::Nothing => {}
             Action::Data(what) => self.start_data(&what),
+            Action::Update => self.update_now(),
             Action::ThisIs(button) => self.this_is(button),
             Action::Search(text) => {
                 self.query = text.clone();
@@ -283,6 +284,7 @@ impl App {
             Kind::Button if it.id == "dlall" => Action::DownloadLiked,
             Kind::Button if it.id == "downloads" => Action::OpenDownloads,
             Kind::Button if matches!(it.id.as_str(), "export" | "import" | "wipe") => Action::Data(it.id.clone()),
+            Kind::Button if it.id == "update" => Action::Update,
             Kind::Button => Action::PlayAll(it.id == "shuffle"),
             Kind::Track | Kind::Header | Kind::Setting => return None,
         })

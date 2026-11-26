@@ -693,3 +693,25 @@ pink,rosado
 white,blanco
 "Nothing was deleted: type ""{w}"" to free that much","No se borró nada: escribe ""{w}"" para liberar tanto espacio"
 "⚠ This deletes nearly all your downloads · type ""delete my downloads"" and Enter, or Esc to keep them","⚠ Esto borra casi todas tus descargas · escribe ""delete my downloads"" y Enter, o Esc para conservarlas"
+no release found,no se encontró ninguna versión
+there is no ready-made rymus for this computer: build it from source,no hay un rymus listo para este computador: compílalo desde el código
+the download does not match its checksum; nothing was changed,la descarga no coincide con su suma de verificación; no se cambió nada
+could not unpack the download; nothing was changed,no se pudo descomprimir la descarga; no se cambió nada
+cannot write next to {a}: {e},no se puede escribir junto a {a}: {e}
+rymus {v} is the latest,rymus {v} es la versión más reciente
+Updating rymus {v} to {tag}…,Actualizando rymus {v} a {tag}…
+Done: {a}. A running rymus picks it up with Cmd Shift R (or Ctrl R).,Listo: {a}. Un rymus abierto lo carga con Cmd Shift R (o Ctrl R).
+Update to {tag}…,Actualizar a {tag}…
+rymus {v} · check now…,rymus {v} · buscar ahora…
+"downloads the new rymus, checks it, and puts it in place of this one; Cmd Shift R then restarts into it","descarga el rymus nuevo, lo verifica y lo pone en lugar de este; luego Cmd Shift R reinicia con él"
+"rymus {tag} is out · Config > Updates, or rymus update","salió rymus {tag} · Config > Actualizaciones, o rymus update"
+Could not look for updates: {e},No se pudieron buscar actualizaciones: {e}
+Looking for updates…,Buscando actualizaciones…
+Updating to {tag}…,Actualizando a {tag}…
+Updated to {tag} · Cmd Shift R restarts into it,Actualizado a {tag} · Cmd Shift R reinicia con la versión nueva
+Could not update: {e},No se pudo actualizar: {e}
+Check for updates,Buscar actualizaciones
+Updates,Actualizaciones
+"once a day rymus asks GitHub for the name of its latest release, and tells you when there is a newer one; nothing about you is sent",una vez al día rymus le pregunta a GitHub el nombre de su última versión y te avisa si hay una más nueva; no se envía nada sobre ti
+"install the latest rymus in place of this one, if there is a newer one","instala el rymus más reciente en lugar de este, si hay uno más nuevo"
+"a song's file is ready (its path in ""path""; its cover, thumbnail and lyrics files in ""cover"", ""thumbnail"" and ""lyrics"", null when there are none)","el archivo de una canción está listo (su ruta en ""path""; su portada, miniatura y letra en ""cover"", ""thumbnail"" y ""lyrics"", null si no hay)"

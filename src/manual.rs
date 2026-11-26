@@ -4,9 +4,10 @@ use crate::config::SETTINGS;
 use crate::i18n::t;
 use crate::render::HELP;
 
-const COMMANDS: [(&str, &str); 5] = [
+const COMMANDS: [(&str, &str); 6] = [
     ("rymus", "open the player"),
     ("rymus ctl ACTION", "control the rymus that is playing"),
+    ("rymus update", "install the latest rymus in place of this one, if there is a newer one"),
     ("rymus man", "read the manual (piped or redirected: write it as a man page)"),
     ("rymus help", "this help; also -h, --help. rymus --version (-V) says which one you run"),
     ("rymus translations", "every text with its translations, as CSV, to add a language"),
@@ -30,7 +31,7 @@ const HOOKS: [(&str, &str); 12] = [
     ("played", "it reaches its end"),
     ("skipped", "you move on before its end"),
     ("download-started", "a song starts downloading"),
-    ("downloaded", "a song's file is ready (its path in \"path\")"),
+    ("downloaded", "a song's file is ready (its path in \"path\"; its cover, thumbnail and lyrics files in \"cover\", \"thumbnail\" and \"lyrics\", null when there are none)"),
     ("download-failed", "a download did not work"),
     ("download-deleted", "a downloaded file is deleted"),
 ];
@@ -86,7 +87,7 @@ pub fn page() -> String {
     // the first line tells groff the text is UTF-8: translations have accents
     let mut out = format!(".\\\" -*- coding: utf-8 -*-\n.TH RYMUS 1 \"\" \"rymus {}\" \"{}\"\n", env!("CARGO_PKG_VERSION"), roff(t("User Commands")));
     out.push_str(&format!("{}rymus \\- {}\n", section("Name"), roff(t("YouTube Music in the terminal"))));
-    out.push_str(&format!("{}.B rymus\n.br\n.B rymus ctl\n.I action\n.br\n.B rymus\n.RB [ man | help | translations | \\-\\-version ]\n", section("Synopsis")));
+    out.push_str(&format!("{}.B rymus\n.br\n.B rymus ctl\n.I action\n.br\n.B rymus\n.RB [ man | help | translations | update | \\-\\-version ]\n", section("Synopsis")));
     out.push_str(&format!("{}{}\n{}{}.SS {}\n{}{}", section("Description"), roff(t(ABOUT)), section("Commands"), entries(&COMMANDS), roff(t("Actions for rymus ctl")), entries(&CTL), section("Keys")));
     for (name, keys) in HELP {
         out.push_str(&format!(".SS {}\n{}", roff(t(name)), entries(keys)));
