@@ -151,10 +151,11 @@ impl App {
                 return true;
             }
         }
-        if self.help || self.credits.is_some() {
+        if self.help || self.credits.is_some() || self.news.is_some() {
             if matches!(e.kind, M::Down(_)) {
                 self.help = false;
                 self.credits = None;
+                self.news = None;
                 self.help_scroll = 0;
                 return true;
             }
@@ -346,6 +347,24 @@ impl App {
         }
         if self.viewer.url.is_some() {
             return self.close_viewer(); // any key but space (it plays and pauses, above)
+        }
+        if self.news.is_some() && !ctrl {
+            // what changed: ↑ ↓ scroll it, o opens the release's page, any other key closes it
+            match code {
+                KeyCode::Up => self.help_scroll = self.help_scroll.saturating_sub(1),
+                KeyCode::Down => self.help_scroll += 1,
+                KeyCode::Char('o') => {
+                    let url = self.news.as_ref().map(|n| crate::update::page(&n.0)).unwrap_or_default();
+                    if !crate::platform::open_url(&url) {
+                        self.set_note(tr!("The release: {url}", url = url));
+                    }
+                }
+                _ => {
+                    self.news = None;
+                    self.help_scroll = 0;
+                }
+            }
+            return;
         }
         if self.credits.is_some() && !ctrl {
             // the credits panel: ↑ ↓ scroll it, s shares what it is about, any other key closes it

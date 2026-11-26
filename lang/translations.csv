@@ -715,13 +715,11 @@ Updates,Actualizaciones
 "once a day rymus asks GitHub for the name of its latest release, and tells you when there is a newer one; nothing about you is sent",una vez al día rymus le pregunta a GitHub el nombre de su última versión y te avisa si hay una más nueva; no se envía nada sobre ti
 "install the latest rymus in place of this one, if there is a newer one","instala el rymus más reciente en lugar de este, si hay uno más nuevo"
 "a song's file is ready (its path in ""path""; its cover, thumbnail and lyrics files in ""cover"", ""thumbnail"" and ""lyrics"", null when there are none)","el archivo de una canción está listo (su ruta en ""path""; su portada, miniatura y letra en ""cover"", ""thumbnail"" y ""lyrics"", null si no hay)"
-Visualizer style: {a},Estilo del visualizador: {a}
-visualizer style,estilo del visualizador
 General,General
 Config · ↑ ↓ section · → open it,Ajustes · ↑ ↓ sección · → abrirla
 Config · ↑ ↓ choose · ← → change · esc sections,Ajustes · ↑ ↓ elegir · ← → cambiar · esc secciones
-Loading the cover…,Cargando la portada…
-Cover · Esc or a click closes,Portada · Esc o un clic la cierra
+Visualizer style: {a},Estilo del visualizador: {a}
+visualizer style,estilo del visualizador
 Credits,Créditos
 Share link,Compartir enlace
 Link,Enlace
@@ -735,3 +733,7 @@ Link copied · {url},Enlace copiado · {url}
 The link: {url},El enlace: {url}
 Credits · {title} — {by}{more} · s shares · any other key closes,Créditos · {title} — {by}{more} · s comparte · cualquier otra tecla cierra
 YouTube Music has no credits for this one,YouTube Music no tiene créditos para esta
+Loading the cover…,Cargando la portada…
+Cover · Esc or a click closes,Portada · Esc o un clic la cierra
+The release: {url},El release: {url}
+What's new in rymus {tag}{more} · o opens the full release · any other key closes,Novedades de rymus {tag}{more} · o abre el release completo · cualquier otra tecla cierra

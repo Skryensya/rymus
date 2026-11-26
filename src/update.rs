@@ -87,6 +87,52 @@ pub fn install(tag: &str) -> Result<PathBuf, String> {
     Ok(exe)
 }
 
+// The release's page on GitHub, where its notes are read in full.
+pub fn page(tag: &str) -> String {
+    format!("https://github.com/{REPO}/releases/tag/{tag}")
+}
+
+// What changed in release `tag`: the first section of its notes, as plain lines ("• " for each point).
+pub fn notes(tag: &str) -> Result<Vec<String>, String> {
+    #[cfg(test)]
+    let body = format!("## What's new\n\n- **Credits.** Who made a song (`i`).\n- Share links.\n\n## Install\n\n```sh\ntar -xzf rymus-{tag}.tar.gz\n```");
+    #[cfg(not(test))]
+    let body = {
+        let v: serde_json::Value = crate::yt::agent()
+            .get(&format!("https://api.github.com/repos/{REPO}/releases/tags/{tag}"))
+            .set("User-Agent", "rymus")
+            .set("Accept", "application/vnd.github+json")
+            .call()
+            .map_err(|e| e.to_string())?
+            .into_json()
+            .map_err(|e| e.to_string())?;
+        v["body"].as_str().unwrap_or_default().to_string()
+    };
+    Ok(what_changed(&body))
+}
+fn what_changed(body: &str) -> Vec<String> {
+    let mut lines = vec![];
+    let mut headings = 0;
+    for line in body.lines().map(str::trim) {
+        if line.starts_with("## ") {
+            headings += 1;
+            if headings > 1 {
+                break; // past "What's new": how to install, and the rest
+            }
+            continue;
+        }
+        let line = line.strip_prefix("- ").or(line.strip_prefix("* ")).map_or(line.to_string(), |l| format!("• {l}"));
+        let plain = crate::item::clean(&line.replace("**", "").replace('`', "").replace('*', ""));
+        if !(plain.is_empty() && lines.last().is_none_or(|l: &String| l.is_empty())) {
+            lines.push(plain);
+        }
+    }
+    while lines.last().is_some_and(|l| l.is_empty()) {
+        lines.pop();
+    }
+    lines
+}
+
 // `rymus update`
 pub fn run() -> Result<(), String> {
     let tag = latest()?;
@@ -112,5 +158,12 @@ mod tests {
         assert!(!newer("v0.4.0", "0.4.0"));
         assert!(!newer("v0.3.9", "0.4.0"));
         assert!(target().is_some());
+    }
+
+    #[test]
+    fn notes_keep_what_changed_without_markdown() {
+        let lines = notes("v9.0.0").unwrap();
+        assert_eq!(lines, ["• Credits. Who made a song (i).", "• Share links."]);
+        assert_eq!(page("v9.0.0"), "https://github.com/Skryensya/rymus/releases/tag/v9.0.0");
     }
 }

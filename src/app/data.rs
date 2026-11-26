@@ -103,6 +103,27 @@ impl App {
             self.ask_github(false);
         }
     }
+    // The first run of a newer rymus than the last one shows what changed, from its release notes. A first run ever,
+    // or one after the data was deleted, shows nothing: there is no "before" to compare with.
+    pub fn show_news(&mut self) {
+        let seen = self.db.get_setting("seen_version");
+        self.db.set_setting("seen_version", crate::update::VERSION);
+        let tag = format!("v{}", crate::update::VERSION);
+        if !seen.is_some_and(|v| crate::update::newer(&tag, &v)) {
+            return;
+        }
+        let tx = self.tx.clone();
+        std::thread::spawn(move || {
+            let Ok(lines) = crate::update::notes(&tag) else { return }; // offline: the page is still a click away in Config
+            if lines.is_empty() {
+                return;
+            }
+            let _ = tx.send(Msg::Apply(Box::new(move |app: &mut App| {
+                app.help_scroll = 0;
+                app.news = Some((tag, lines));
+            })));
+        });
+    }
     fn tell_update(&mut self, tag: &str) {
         self.set_note(tr!("rymus {tag} is out · Config > Updates, or rymus update", tag = tag));
     }

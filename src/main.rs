@@ -244,6 +244,7 @@ fn run() -> Result<(), String> {
     }
     app.start();
     app.check_for_update();
+    app.show_news();
     // after a restart (Cmd Shift R), back on the tab it was on
     if let Some(i) = app.db.get_setting("restart_tab").and_then(|v| v.parse::<usize>().ok()) {
         app.db.set_setting("restart_tab", "");

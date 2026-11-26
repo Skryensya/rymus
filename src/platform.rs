@@ -174,3 +174,12 @@ pub fn copy(text: &str) -> bool {
         wrote && child.wait().is_ok_and(|s| s.success())
     })
 }
+
+// Opens a web page in the browser: open on macOS, xdg-open on Linux.
+pub fn open_url(url: &str) -> bool {
+    if cfg!(test) {
+        return true;
+    }
+    let tool = if cfg!(target_os = "macos") { "open" } else { "xdg-open" };
+    Command::new(tool).arg(url).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).spawn().is_ok()
+}

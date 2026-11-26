@@ -184,6 +184,8 @@ Run it again after updating.
 
 Once a day rymus asks GitHub for the name of its latest release (nothing about you is sent) and, when there is a newer one, says so with a note. *Config → Updates* installs it (or `rymus update` in a terminal): the new binary is downloaded, checked against its sha256, and put in place of this one; `Cmd Shift R` then restarts into it without stopping the music. *Check for updates: off* never asks.
 
+The first time a new version opens, a small panel shows what changed, from its release notes; `o` opens the full release on GitHub, any other key closes it.
+
 ## Credits and sharing
 
 `i` shows who made the highlighted song or album (or the one playing, from the full player): performers, writers, producers and label, as YouTube Music lists them. An album's are those of all its songs together, with its year, length and description. A music video has no credits of its own, so rymus shows those of the song with the same title. In that panel `s` copies the link to YouTube Music; the row menu (`m` or right-click) has *Credits* and *Share link* too. The link goes to the clipboard with `pbcopy` on macOS, or `wl-copy`, `xclip` or `xsel` on Linux.

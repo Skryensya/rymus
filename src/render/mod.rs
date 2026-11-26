@@ -230,6 +230,24 @@ impl App {
             let more = if rows.len() > l { tr!(" · ↑↓ for more") } else { "" };
             rows.drain(..self.help_scroll);
             frame(&tr!("Keys{more} · any other key closes", more = more), a, &blank_to(rows.into_iter().take(l).collect()), w, a)
+        } else if let Some((tag, lines)) = &self.news {
+            // what changed in this version, from its release notes
+            let tw = iw.saturating_sub(6).max(10);
+            let mut rows = vec![String::new()];
+            for line in lines {
+                let (lead, rest) = if let Some(point) = line.strip_prefix("• ") { (fg(a, "•"), point) } else { (" ".into(), line.as_str()) };
+                for (k, part) in lyrics::wrap(rest, tw).into_iter().enumerate() {
+                    rows.push(format!("   {} {part}", if k == 0 { lead.clone() } else { " ".into() }));
+                }
+            }
+            rows.push(String::new());
+            rows.push(format!("   {}", dim(&crate::update::page(tag))));
+            self.help_scroll = self.help_scroll.min(rows.len().saturating_sub(l));
+            let more = if rows.len() > l { tr!(" · ↑↓ for more") } else { "" };
+            rows.drain(..self.help_scroll);
+            let rows: Vec<String> = rows.into_iter().take(l).map(|r| format!("{r}{}", spaces(iw.saturating_sub(width(&eq::plain(&r)))))).collect();
+            let (t, col) = title_for(&tr!("What's new in rymus {tag}{more} · o opens the full release · any other key closes", tag = tag, more = more));
+            frame(&t, col, &blank_to(rows), w, a)
         } else if let Some(c) = &self.credits {
             let mut rows = help::credits_rows(c, iw, a);
             self.help_scroll = self.help_scroll.min(rows.len().saturating_sub(l));

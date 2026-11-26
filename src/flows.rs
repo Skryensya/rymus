@@ -2326,3 +2326,32 @@ fn shift_click_on_a_cover_shows_it_big_and_any_click_or_key_closes_it() {
     assert!(ui.app.viewer.url.is_none(), "a key closes it");
     assert!(!ui.shows("Cover · Esc"));
 }
+
+#[test]
+fn a_newer_version_shows_what_changed_once() {
+    let mut ui = Ui::with(|db| db.set_setting("seen_version", "0.1.0"));
+    ui.size = (110, 40);
+    ui.app.show_news();
+    ui.wait("the notes", |ui| ui.app.news.is_some());
+    let tag = format!("v{}", crate::update::VERSION);
+    for part in [format!("What's new in rymus {tag}"), "Credits. Who made a song (i).".into(), "Share links.".into(), crate::update::page(&tag)] {
+        assert!(ui.shows(&part), "{part}\n{}", ui.screen().join("\n"));
+    }
+    assert!(!ui.shows("tar -xzf"), "only what changed, not how to install");
+    ui.ch('o');
+    assert!(ui.app.news.is_some(), "o opens the release page and keeps the notes");
+    ui.key(KeyCode::Esc);
+    assert!(ui.app.news.is_none());
+    ui.app.show_news();
+    while let Ok(m) = ui.inbox.recv_timeout(Duration::from_millis(300)) {
+        ui.app.handle(m); // whatever the background answers
+    }
+    assert!(ui.app.news.is_none(), "once per version");
+
+    let mut fresh = Ui::new();
+    fresh.app.show_news();
+    while let Ok(m) = fresh.inbox.recv_timeout(Duration::from_millis(300)) {
+        fresh.app.handle(m); // whatever the background answers
+    }
+    assert!(fresh.app.news.is_none(), "a first run ever has no before to compare with");
+}
