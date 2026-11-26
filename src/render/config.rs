@@ -3,7 +3,6 @@
 use crate::i18n::tr;
 use super::*;
 use crate::config;
-use super::eq::plain;
 
 impl App {
     pub(super) fn config_body(&mut self, v: &View, g: &mut Geo) -> Vec<String> {
@@ -110,8 +109,8 @@ impl App {
             .into_iter()
             .enumerate()
             .map(|(r, line)| {
-                let left = if side { pad_to(&format!(" {}", menu.get(r).map_or("", |m| m.as_str())), mw) + &dim("│") } else { String::new() };
-                pad_to(&format!("{left} {line}"), iw)
+                let left = if side { pad_styled(&format!(" {}", menu.get(r).map_or("", |m| m.as_str())), mw) + &dim("│") } else { String::new() };
+                pad_styled(&format!("{left} {line}"), iw)
             })
             .collect();
         self.settings = data;
@@ -162,10 +161,6 @@ fn crossfade_picture(secs: f64, w: usize, a: Rgb) -> Vec<String> {
     ]
 }
 
-fn pad_to(s: &str, w: usize) -> String {
-    let n = width(&plain(s));
-    if n > w { cut(&plain(s), w) } else { format!("{s}{}", spaces(w - n)) }
-}
 
 // A setting's choices on one line of at most `room` columns, the chosen one marked: colors with a dot of their color,
 // borders with a corner of theirs. When they do not all fit, the ones around the chosen one, with ‹ › for the rest.
@@ -211,7 +206,3 @@ fn chips(key: &str, chosen: &str, on: bool, room: usize, a: Rgb) -> (String, Vec
     (line, spans)
 }
 
-fn capital(s: &str) -> String {
-    let mut chars = s.chars();
-    chars.next().map_or(String::new(), |c| c.to_uppercase().chain(chars).collect())
-}

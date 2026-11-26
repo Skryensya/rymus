@@ -92,7 +92,7 @@ pub fn palette(px: &[u8]) -> Vec<[u8; 3]> {
     let weight: u64 = all.iter().map(|b| b.total).sum();
     let lum = |c: &[u8; 3]| c[0] as u32 * 30 + c[1] as u32 * 59 + c[2] as u32 * 11;
     let mut main: Vec<&Bucket> = all.iter().filter(|b| b.total * 20 > weight).collect();
-    main.sort_by(|a, b| b.total.cmp(&a.total));
+    main.sort_by_key(|b| std::cmp::Reverse(b.total));
     let mut colors: Vec<[u8; 3]> = main.iter().take(4).map(|b| b.sum.map(|v| (v as f64 / b.total as f64).round() as u8)).collect();
     if colors.len() < 2 {
         // too few hues: add the cover's shades

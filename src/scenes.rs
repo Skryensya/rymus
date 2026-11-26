@@ -370,11 +370,12 @@ struct Song<'a> {
     energy: f64,
 }
 
+#[allow(clippy::too_many_arguments, clippy::needless_range_loop)] // one function per scene's state; bands index several arrays
 fn draw(k: usize, m: &mut Mem, f: &Feel, p: &Pal, w: usize, h: usize, smoke: &mut Trip, song: &Song) -> Vec<Cell> {
     m.fit(w, h);
     let live = f.dt > 0.0; // paused: the picture holds still
     let k25 = f.dt * 25.0; // frame rate independent steps
-    let spin = if f.seed % 2 == 0 { 1.0 } else { -1.0 };
+    let spin = if f.seed.is_multiple_of(2) { 1.0 } else { -1.0 };
     let aspect = w as f64 / h as f64 / 2.0; // half the width, in half heights
     match k {
         // ----- Battery: each frame is the last one, moved a little and dimmed, with new light drawn on top
@@ -914,7 +915,7 @@ mod tests {
 
     #[test]
     fn every_scene_fills_the_screen_exactly() {
-        for scene in 0..SCENES.len() {
+        for (scene, _) in SCENES.iter().enumerate() {
             for (w, h) in [(80, 24), (37, 9), (200, 60), (12, 4)] {
                 for loud in [false, true] {
                     let mut show = Show::default();
@@ -975,7 +976,7 @@ mod tests {
 
     #[test]
     fn nothing_flashes() {
-        for scene in 0..SCENES.len() {
+        for (scene, _) in SCENES.iter().enumerate() {
             let mut show = Show::default();
             show.cells(60, 20, 0.0, 0.0, &bands(false, 0.0), 0.0, &PAL, "song", "", "", None);
             show.scene = scene;

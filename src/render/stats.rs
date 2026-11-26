@@ -40,7 +40,7 @@ impl App {
                 .iter()
                 .enumerate()
                 .map(|(i, name)| {
-                    let t = capital(name);
+                    let t = capital_t(name);
                     if i == on { format!("[{t}]") } else { format!(" {t} ") }
                 })
                 .collect::<Vec<_>>()
@@ -53,7 +53,7 @@ impl App {
         let mut selector = cell(&format!("{left}{}{right}", spaces(iw.saturating_sub(width(&left) + width(&right)).max(2))), iw);
         for (names, on) in [(&CATS[..], self.stat_cat), (&periods[..], self.period)] {
             let name = names[on];
-            let chosen = format!("[{}]", capital(name));
+            let chosen = format!("[{}]", capital_t(name));
             selector = selector.replacen(&chosen, &fg(a, &bold(&chosen)), 1);
         }
         let (t, c) = v.title(&tr!("Stats · top 100 {a} · last {b} days", a = crate::i18n::t(CATS[self.stat_cat]), b = PERIODS[self.period].1));
@@ -73,7 +73,6 @@ impl App {
 }
 
 // A name in the chosen language, with its first letter in capitals.
-fn capital(name: &str) -> String {
-    let mut chars = crate::i18n::t(name).chars();
-    chars.next().map_or(String::new(), |c| c.to_uppercase().chain(chars).collect())
+fn capital_t(name: &str) -> String {
+    capital(crate::i18n::t(name))
 }

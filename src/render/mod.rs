@@ -22,6 +22,7 @@ mod help;
 mod eq;
 mod config;
 mod viewer;
+mod panels;
 mod downloads;
 use help::help_rows;
 pub use help::HELP;
@@ -98,6 +99,14 @@ pub(super) fn pane(id: PaneId, x0: usize, x1: usize, top: i64, head: usize) -> P
 }
 
 impl App {
+    // A panel's page from where it is scrolled to, at most `l` rows, and the title's note when there is more.
+    fn scrolled(&mut self, mut rows: Vec<String>, l: usize) -> (Vec<String>, &'static str) {
+        self.panel_scroll = self.panel_scroll.min(rows.len().saturating_sub(l));
+        let more = if rows.len() > l { tr!(" · ↑↓ for more") } else { "" };
+        rows.drain(..self.panel_scroll);
+        rows.truncate(l);
+        (rows, more)
+    }
     // [glyph, color] of a track's rating.
     fn rating(&self, id: &str) -> Option<(&'static str, Rgb)> {
         if self.likes.contains(id) {
@@ -224,38 +233,21 @@ impl App {
             rows.resize(l, spaces(iw));
             rows
         };
+        // the panels over the lists (keys, what's new, credits) scroll as one page
         let body: Vec<String> = if self.help {
-            let mut rows = help_rows(iw, a);
-            self.help_scroll = self.help_scroll.min(rows.len().saturating_sub(l));
-            let more = if rows.len() > l { tr!(" · ↑↓ for more") } else { "" };
-            rows.drain(..self.help_scroll);
-            frame(&tr!("Keys{more} · any other key closes", more = more), a, &blank_to(rows.into_iter().take(l).collect()), w, a)
-        } else if let Some((tag, lines)) = &self.news {
-            // what changed in this version, from its release notes
-            let tw = iw.saturating_sub(6).max(10);
-            let mut rows = vec![String::new()];
-            for line in lines {
-                let (lead, rest) = if let Some(point) = line.strip_prefix("• ") { (fg(a, "•"), point) } else { (" ".into(), line.as_str()) };
-                for (k, part) in lyrics::wrap(rest, tw).into_iter().enumerate() {
-                    rows.push(format!("   {} {part}", if k == 0 { lead.clone() } else { " ".into() }));
-                }
-            }
-            rows.push(String::new());
-            rows.push(format!("   {}", dim(&crate::update::page(tag))));
-            self.help_scroll = self.help_scroll.min(rows.len().saturating_sub(l));
-            let more = if rows.len() > l { tr!(" · ↑↓ for more") } else { "" };
-            rows.drain(..self.help_scroll);
-            let rows: Vec<String> = rows.into_iter().take(l).map(|r| format!("{r}{}", spaces(iw.saturating_sub(width(&eq::plain(&r)))))).collect();
+            let (rows, more) = self.scrolled(help_rows(iw, a), l);
+            frame(&tr!("Keys{more} · any other key closes", more = more), a, &blank_to(rows), w, a)
+        } else if let Some((tag, lines)) = self.news.clone() {
+            let (rows, more) = self.scrolled(panels::news_rows(&tag, &lines, iw, a), l);
             let (t, col) = title_for(&tr!("What's new in rymus {tag}{more} · o opens the full release · any other key closes", tag = tag, more = more));
             frame(&t, col, &blank_to(rows), w, a)
         } else if let Some(c) = &self.credits {
-            let mut rows = help::credits_rows(c, iw, a);
-            self.help_scroll = self.help_scroll.min(rows.len().saturating_sub(l));
-            let more = if rows.len() > l { tr!(" · ↑↓ for more") } else { "" };
-            rows.drain(..self.help_scroll);
-            let what = if c.item.kind == Kind::Album { &c.item.author } else { &c.item.artist };
-            let (t, col) = title_for(&tr!("Credits · {title} — {by}{more} · s shares · any other key closes", title = c.item.title, by = what, more = more));
-            frame(&t, col, &blank_to(rows.into_iter().take(l).collect()), w, a)
+            let what = if c.item.kind == Kind::Album { c.item.author.clone() } else { c.item.artist.clone() };
+            let title = c.item.title.clone();
+            let page = panels::credits_rows(c, iw, a);
+            let (rows, more) = self.scrolled(page, l);
+            let (t, col) = title_for(&tr!("Credits · {title} — {by}{more} · s shares · any other key closes", title = title, by = what, more = more));
+            frame(&t, col, &blank_to(rows), w, a)
         } else if let Some(m) = &self.menu {
             g.menu_top = (m.sel + 1).saturating_sub(l);
             let rows = m

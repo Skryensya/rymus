@@ -36,6 +36,7 @@ mod clock;
 mod input;
 mod equalizer;
 mod data;
+mod updates;
 mod albums;
 mod search;
 mod extras;
@@ -85,7 +86,7 @@ pub enum Msg {
 
 #[derive(Clone)]
 pub enum Action {
-    Data(String), // export, import or wipe (Config > Data)
+    Data(String), // export, import or wipe (Config > General)
     Update,       // Config's Update row: check, and install when there is a newer rymus
     OpenAlbum(Item),
     OpenArtist(Item),
@@ -385,7 +386,7 @@ pub struct App {
     pub viewer: Viewer, // a cover, big (Shift+click)
     pub detach: bool, // quit leaving the music playing
     pub restart: bool, // and start again at once: the way to pick up a new build
-    pub help_scroll: usize, // also the credits panel's
+    pub panel_scroll: usize, // how far the open panel (keys, credits, what's new) is scrolled
     pub credits: Option<Credits>,
     pub news: Option<(String, Vec<String>)>, // what changed in this version: (its tag, the release notes' lines)
     pub full: bool, // the full player (v)
@@ -524,7 +525,7 @@ impl App {
         App {
             db, db_path, yt: Yt::new(), tx, mpv, feed, quit: false, clear_screen: false,
             tab: Tab::Home, prev_tab: Tab::Home, typing: false, buf: String::new(), history_at: None, history: vec![], draft: String::new(),
-            msg: String::new(), note: String::new(), note_until: None, busy: String::new(), help: false, eq: EqView::default(), viewer: Viewer::default(), detach: false, restart: false, help_scroll: 0, credits: None, news: None, full: false, menu: None,
+            msg: String::new(), note: String::new(), note_until: None, busy: String::new(), help: false, eq: EqView::default(), viewer: Viewer::default(), detach: false, restart: false, panel_scroll: 0, credits: None, news: None, full: false, menu: None,
             lyrics: false, lyric_scroll: 0, karaoke: false, lyric_scrolled: None, lyric_line: None, lyric_dots: None, karaoke_style,
             items: vec![], title: String::new(), numbered: false, back: vec![], head: None, query: String::new(), list_id: 0, next_id: 1,
             home_left: vec![], home_right: vec![], home_titles: Default::default(), home_wide: true, home_focus: PaneId::Left, home_sel: [0, 0],

@@ -110,7 +110,7 @@ pub fn set(language: &str) {
 
 // The text in the chosen language.
 // (a translation lives for the whole run, so it outlives whatever text it stands for)
-pub fn t<'a>(english: &'a str) -> &'a str {
+pub fn t(english: &str) -> &str {
     with(|s| s.all.tables.get(s.chosen).and_then(|table| table.get(english)).copied().unwrap_or(english))
 }
 // For a text only known when it runs (a stored name): translated if it is one of ours.

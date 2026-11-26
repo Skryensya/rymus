@@ -95,10 +95,6 @@ fn fit(px: (usize, usize), cell: (usize, usize), cols: usize, rows: usize) -> (u
     (c.min(cols), rows_for(c).min(rows))
 }
 
-fn center(s: &str, w: usize) -> String {
-    let n = width(s).min(w);
-    format!("{}{}{}", spaces((w - n) / 2), cut(s, w), spaces(w - n - (w - n) / 2))
-}
 
 #[cfg(test)]
 mod tests {

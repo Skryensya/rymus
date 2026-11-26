@@ -1416,7 +1416,7 @@ fn the_player_can_sit_on_top_and_still_answers_clicks() {
     assert!(player < body, "the player above the lists\n{}", screen.join("\n"));
     assert!(screen.iter().all(|r| r.chars().count() == 100));
     // its buttons, the search field and the lists still answer where they are drawn
-    let c = ui.app.geo.controls.iter().find(|c| c.0 == crate::app::Control::PlayPause).unwrap().clone();
+    let c = *ui.app.geo.controls.iter().find(|c| c.0 == crate::app::Control::PlayPause).unwrap();
     ui.click(c.1 + 1, c.3);
     assert!(ui.told().iter().any(|m| m.to_string().contains("pause")), "play/pause clicked");
     let (x, y) = ui.at("Result Two");
@@ -1940,7 +1940,7 @@ fn playlist_hooks_name_the_playlist() {
 }
 
 // ---------- your data ----------
-// Config > Data: the row with this id, highlighted.
+// Config > General: the data row with this id, highlighted.
 fn to_data_row(ui: &mut Ui, id: &str) {
     for _ in 0..10 {
         if ui.app.tab == Tab::Config {

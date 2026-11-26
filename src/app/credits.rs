@@ -7,7 +7,7 @@ use super::*;
 pub struct Credits {
     pub item: Item,
     pub about: Vec<String>,                // an album's year, length and description
-    pub roles: Vec<(String, Vec<String>)>, // ("Produced by", names)
+    pub roles: crate::yt::Roles,          // ("Produced by", names)
 }
 
 // Only what YouTube Music has can be shared or credited: not your own files, nor albums known only by name (Stats).
@@ -32,7 +32,7 @@ impl App {
         self.run_busy(tr!("Looking up the credits…").into(), move || {
             let (about, roles) = if it.kind == Kind::Album { yt.album_credits(&it)? } else { (vec![], yt.credits(&it)?) };
             Ok(Box::new(move |app: &mut App| {
-                app.help_scroll = 0;
+                app.panel_scroll = 0;
                 app.credits = Some(Credits { item: it, about, roles });
             }))
         });

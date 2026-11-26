@@ -118,7 +118,7 @@ pub fn fade_secs(v: &str) -> f64 {
 
 // Where the crossfade starts: None when it is off or the song is too short to fade.
 pub fn fade_at(secs: f64, dur: f64) -> Option<f64> {
-    (secs > 0.0 && dur >= secs * 3.0).then(|| dur - secs)
+    (secs > 0.0 && dur >= secs * 3.0).then_some(dur - secs)
 }
 
 // The next song fades in on the main player while a second one plays this song's end fading out (Mpv::tail).

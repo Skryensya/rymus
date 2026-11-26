@@ -1,4 +1,4 @@
-// New versions of rymus: GitHub's latest release, looked at once a day at most (Config > Updates turns it off), and
+// New versions of rymus: GitHub's latest release, looked at once a day at most (Config > General can turn it off), and
 // put in place of this binary by `rymus update` or Config's Update row. Only the release's own name is asked for; no
 // data of yours goes with it. The download is checked against the release's sha256 before it replaces anything.
 use crate::i18n::tr;
@@ -122,7 +122,7 @@ fn what_changed(body: &str) -> Vec<String> {
             continue;
         }
         let line = line.strip_prefix("- ").or(line.strip_prefix("* ")).map_or(line.to_string(), |l| format!("• {l}"));
-        let plain = crate::item::clean(&line.replace("**", "").replace('`', "").replace('*', ""));
+        let plain = crate::item::clean(&line.replace("**", "").replace(['`', '*'], ""));
         if !(plain.is_empty() && lines.last().is_none_or(|l: &String| l.is_empty())) {
             lines.push(plain);
         }

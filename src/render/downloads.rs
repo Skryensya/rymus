@@ -2,7 +2,7 @@
 // settings, and what to do: download, read your own music, free up space.
 use crate::i18n::t;
 use crate::i18n::tr;
-use super::eq::{keys_line, overlay, plain, window_at};
+use super::eq::{keys_line, overlay, window_at};
 use super::*;
 use crate::app::downloads::{BUTTONS, SETTINGS};
 use crate::{config, disk};
@@ -88,10 +88,6 @@ impl App {
     }
 }
 
-fn capital(s: &str) -> String {
-    let mut chars = s.chars();
-    chars.next().map_or(String::new(), |c| c.to_uppercase().chain(chars).collect())
-}
 fn config_label(key: &str) -> &'static str {
     config::SETTINGS.iter().find(|s| s.key == key).map_or("", |s| t(s.label))
 }

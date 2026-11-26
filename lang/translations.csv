@@ -234,7 +234,6 @@ Yesterday,Ayer
 Downloads and your music: {folder}…,Descargas y tu música: {folder}…
 Equalizer: {a}…,Ecualizador: {a}…
 "ten bands, ready made profiles and your own (also E from anywhere)","diez bandas, perfiles listos y los tuyos (también E desde cualquier parte)"
-Data,Datos
 Export your data…,Exportar tus datos…
 "everything (likes, playlists, history, settings) as CSV files in a new folder: open them in any spreadsheet, keep them, or take them to another computer","todo (me gusta, playlists, historial, ajustes) como archivos CSV en una carpeta nueva: ábrelos en cualquier hoja de cálculo, guárdalos o llévalos a otro computador"
 Import data…,Importar datos…
@@ -263,7 +262,6 @@ no songs found (is the playlist public?),no se encontraron canciones (¿la playl
 Artist,Artista
 {year}{songs} songs,{year}{songs} canciones
 l likes the album,l marca el álbum con me gusta
-Config · ↑ ↓ choose · ← → change,Ajustes · ↑ ↓ elegir · ← → cambiar
 this song,esta canción
 next song,siguiente
 "one ends, the next starts: no overlap","una termina, la otra empieza: sin superponerse"
@@ -385,7 +383,6 @@ Audio quality,Calidad de audio
 best,la mejor
 data saver,ahorro de datos
 "data saver streams the smallest audio there is, for slow or metered connections","ahorro de datos transmite el audio más liviano que hay, para conexiones lentas o con límite"
-Streaming,Transmisión
 Pixel art covers,Portadas pixel art
 "draw every cover as colored blocks, even where the terminal can show the image","dibuja cada portada con bloques de color, aunque la terminal pueda mostrar la imagen"
 Screen,Pantalla
@@ -404,7 +401,6 @@ Borders,Bordes
 "how the frames are drawn: lines, dashes, dots, blocks, or ornate scrolls in plain ASCII","cómo se dibujan los marcos: líneas, guiones, puntos, bloques, o volutas adornadas en ASCII"
 Pause on output change,Pausar al cambiar la salida
 pause when headphones are unplugged or the audio output changes,pausa al desconectar audífonos o cuando cambia la salida de audio
-Output,Salida
 Keep offline,Guardar sin conexión
 liked songs,canciones que me gustan
 "download every song you like from now on; it plays from the file, with or without network (b downloads any song)","descarga cada canción que marques con me gusta desde ahora; suena desde el archivo, con o sin red (b descarga cualquier canción)"
@@ -704,14 +700,13 @@ Done: {a}. A running rymus picks it up with Cmd Shift R (or Ctrl R).,Listo: {a}.
 Update to {tag}…,Actualizar a {tag}…
 rymus {v} · check now…,rymus {v} · buscar ahora…
 "downloads the new rymus, checks it, and puts it in place of this one; Cmd Shift R then restarts into it","descarga el rymus nuevo, lo verifica y lo pone en lugar de este; luego Cmd Shift R reinicia con él"
-"rymus {tag} is out · Config > Updates, or rymus update","salió rymus {tag} · Config > Actualizaciones, o rymus update"
+"rymus {tag} is out · Config > General, or rymus update","salió rymus {tag} · Ajustes > General, o rymus update"
 Could not look for updates: {e},No se pudieron buscar actualizaciones: {e}
 Looking for updates…,Buscando actualizaciones…
 Updating to {tag}…,Actualizando a {tag}…
 Updated to {tag} · Cmd Shift R restarts into it,Actualizado a {tag} · Cmd Shift R reinicia con la versión nueva
 Could not update: {e},No se pudo actualizar: {e}
 Check for updates,Buscar actualizaciones
-Updates,Actualizaciones
 "once a day rymus asks GitHub for the name of its latest release, and tells you when there is a newer one; nothing about you is sent",una vez al día rymus le pregunta a GitHub el nombre de su última versión y te avisa si hay una más nueva; no se envía nada sobre ti
 "install the latest rymus in place of this one, if there is a newer one","instala el rymus más reciente en lugar de este, si hay uno más nuevo"
 "a song's file is ready (its path in ""path""; its cover, thumbnail and lyrics files in ""cover"", ""thumbnail"" and ""lyrics"", null when there are none)","el archivo de una canción está listo (su ruta en ""path""; su portada, miniatura y letra en ""cover"", ""thumbnail"" y ""lyrics"", null si no hay)"

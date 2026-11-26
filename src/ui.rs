@@ -171,22 +171,36 @@ pub fn cell(s: &str, w: usize) -> String {
     pad(&cut(s, w), w)
 }
 
-#[cfg(test)]
-pub fn visible(s: &str) -> String {
+// The text without its colour codes.
+pub fn plain(s: &str) -> String {
     let mut out = String::new();
     let mut chars = s.chars();
     while let Some(c) = chars.next() {
         if c == '\x1b' {
-            for c in chars.by_ref() {
-                if c.is_ascii_alphabetic() {
-                    break;
-                }
-            }
+            let _ = chars.by_ref().find(|c| c.is_ascii_alphabetic());
         } else {
             out.push(c);
         }
     }
     out
+}
+#[cfg(test)]
+pub use plain as visible;
+// Styled text padded to `w` visible columns; cut, without its colours, when it is longer.
+pub fn pad_styled(s: &str, w: usize) -> String {
+    let n = width(&plain(s));
+    if n > w { cut(&plain(s), w) } else { format!("{s}{}", spaces(w - n)) }
+}
+// The text with its first letter in capitals.
+pub fn capital(s: &str) -> String {
+    let mut chars = s.chars();
+    chars.next().map_or(String::new(), |c| c.to_uppercase().chain(chars).collect())
+}
+// Text centred in `w` columns.
+pub fn center(s: &str, w: usize) -> String {
+    let n = width(s).min(w);
+    let l = (w - n) / 2;
+    format!("{}{}{}", spaces(l), cut(s, w), spaces(w - n - l))
 }
 
 // Tab bar: [rymus][tab][tab]... as ribbons. Returns the line and the column span of each tab (for the mouse).

@@ -19,6 +19,7 @@ mod playlist; // importing a playlist from a pasted link
 mod cover; //    cover images: download, colours, kitty images and half blocks
 mod output; //   which device the sound goes to
 mod platform; // what differs between macOS and Linux
+mod update; //   new versions: checked once a day, installed by `rymus update`
 
 // Your data and taste
 mod csv; //      CSV files: your data exported and read back
@@ -28,17 +29,16 @@ mod config; //   the Config tab's settings
 mod eq; //       the equalizer: bands, profiles, the filter and its commands
 mod recommend; // the taste model and the ranking of new songs
 mod mixes; //    radios and Discover mixes, built from candidates
+mod hooks; //    your own commands, run on likes, playlists, playback and downloads
 
 // Look
 mod ui; //       frames, tab bar, search field, hints, text widths
 mod theme; //    the accent colour and how it changes
 mod home; //     how Home's sections share the height
-mod hooks; //    your own commands, run on likes, playlists and playback
 mod charts; //   the Stats charts
 mod bigtext; //  the big pixel letters of karaoke
 mod viz; //      the spectrum analyser (inside mpv's audio filter)
 mod trip; //     the old smoke, one of the trip's scenes
-mod update; //   new versions: checked once a day, installed by `rymus update`
 mod scenes; //   the full screen visualizer (V): its scenes, what they hear, how they change
 
 #[cfg(test)]

@@ -65,7 +65,7 @@ impl App {
             r.push(String::new());
             // the explanation: the band you move, or the profile you hear
             let (title, about) = match band {
-                Some(b) => (tr!("{a} Hz · {b} · {c} dB", a = eq::freq_label(FREQS[b]), b = crate::i18n::t(BANDS[b].0), c = format!("{:+}", gains[b])), cap(crate::i18n::t(BANDS[b].1))),
+                Some(b) => (tr!("{a} Hz · {b} · {c} dB", a = eq::freq_label(FREQS[b]), b = crate::i18n::t(BANDS[b].0), c = format!("{:+}", gains[b])), capital(crate::i18n::t(BANDS[b].1))),
                 None => {
                     let whose = mine.map_or(tr!("built in").to_string(), |p| {
                         let edited = if p.gains == eq::built_in(&p.base) { tr!("same as") } else { tr!("edited from") };
@@ -81,7 +81,7 @@ impl App {
         let mut rows: Vec<String> = (0..list_l)
             .map(|i| {
                 let side = right.get(i).cloned().unwrap_or_default();
-                format!(" {} {} {}", left.get(i).cloned().unwrap_or_else(|| spaces(lw)), dim("│"), pad_visible(&side, gw))
+                format!(" {} {} {}", left.get(i).cloned().unwrap_or_else(|| spaces(lw)), dim("│"), pad_styled(&side, gw))
             })
             .collect();
         // what works here, said where you are looking
@@ -121,9 +121,9 @@ pub(super) fn overlay(behind: Vec<String>, window: &[String], x: usize, y: usize
             match i.checked_sub(y).and_then(|j| window.get(j)) {
                 None => dim(&under),
                 Some(win) => {
-                    let before = pad_visible(take(&under, x), x);
+                    let before = pad_styled(take(&under, x), x);
                     let rest: String = under.chars().skip(take(&under, x + ww).chars().count()).collect();
-                    format!("{}{win}{}", dim(&before), dim(&pad_visible(&rest, w.saturating_sub(x + ww))))
+                    format!("{}{win}{}", dim(&before), dim(&pad_styled(&rest, w.saturating_sub(x + ww))))
                 }
             }
         })
@@ -156,7 +156,7 @@ fn sliders(gains: &[i64], band: Option<usize>, col: usize, h: usize, a: Rgb) -> 
     (0..h)
         .map(|r| {
             let level = (mid as f64 - r as f64) * per_row;
-            let labelled = r == 0 || r == mid || r == h - 1 || (h >= 9 && (r == mid / 2 || r == mid + (mid + 1) / 2));
+            let labelled = r == 0 || r == mid || r == h - 1 || (h >= 9 && (r == mid / 2 || r == mid + mid.div_ceil(2)));
             let axis = if r == mid { "┼" } else if labelled { "┤" } else { "│" };
             let num = if !labelled { String::new() } else if r == mid { "0".into() } else { format!("{:+.0}", level) };
             let mut line = dim(&format!("{num:>3} {axis}"));
@@ -202,38 +202,10 @@ fn regions(col: usize) -> String {
         .collect()
 }
 
-fn center(s: &str, w: usize) -> String {
-    let n = width(s).min(w);
-    let l = (w - n) / 2;
-    format!("{}{}{}", spaces(l), cut(s, w), spaces(w - n - l))
-}
 fn mark(s: &str, on: bool, a: Rgb) -> String {
     if on { fg(a, &bold(s)) } else { dim(s) }
 }
-fn cap(s: &str) -> String {
-    let mut c = s.chars();
-    c.next().map_or(String::new(), |f| f.to_uppercase().chain(c).collect())
-}
 
-// Pads or cuts styled text to `w` visible columns.
-fn pad_visible(s: &str, w: usize) -> String {
-    let n = width(&plain(s));
-    format!("{s}{}", spaces(w.saturating_sub(n)))
-}
-
-// The text without its colour codes.
-pub(super) fn plain(s: &str) -> String {
-    let mut out = String::new();
-    let mut chars = s.chars();
-    while let Some(c) = chars.next() {
-        if c == '\x1b' {
-            let _ = chars.by_ref().find(|c| c.is_ascii_alphabetic());
-        } else {
-            out.push(c);
-        }
-    }
-    out
-}
 
 #[cfg(test)]
 mod tests {

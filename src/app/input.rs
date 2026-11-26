@@ -153,10 +153,7 @@ impl App {
         }
         if self.help || self.credits.is_some() || self.news.is_some() {
             if matches!(e.kind, M::Down(_)) {
-                self.help = false;
-                self.credits = None;
-                self.news = None;
-                self.help_scroll = 0;
+                self.close_panels();
                 return true;
             }
             return false;
@@ -295,10 +292,37 @@ impl App {
         self.full = false;
         self.trip_on = false;
         self.lyrics = false;
+        self.close_panels();
+        self.menu = None;
+    }
+    pub(super) fn close_panels(&mut self) {
         self.help = false;
         self.credits = None;
-        self.help_scroll = 0;
-        self.menu = None;
+        self.news = None;
+        self.panel_scroll = 0;
+    }
+    // While keys, credits or what's new is open: ↑ ↓ scroll it, o opens the release (what's new), s shares
+    // (credits), any other key closes it; / still searches from the keys page. True when the key was taken.
+    fn panel_key(&mut self, code: KeyCode) -> bool {
+        if !(self.news.is_some() || self.credits.is_some() || (self.help && code != KeyCode::Char('/'))) {
+            return false;
+        }
+        match code {
+            KeyCode::Up => self.panel_scroll = self.panel_scroll.saturating_sub(1),
+            KeyCode::Down => self.panel_scroll += 1, // drawing keeps it within the page
+            KeyCode::Char('o') if self.news.is_some() => {
+                let url = self.news.as_ref().map(|n| crate::update::page(&n.0)).unwrap_or_default();
+                if !crate::platform::open_url(&url) {
+                    self.set_note(tr!("The release: {url}", url = url));
+                }
+            }
+            KeyCode::Char('s') if self.news.is_none() && self.credits.is_some() => {
+                let it = self.credits.as_ref().map(|c| c.item.clone());
+                self.share(it);
+            }
+            _ => self.close_panels(),
+        }
+        true
     }
     pub(super) fn start_typing(&mut self) {
         self.show_lists();
@@ -348,49 +372,7 @@ impl App {
         if self.viewer.url.is_some() {
             return self.close_viewer(); // any key but space (it plays and pauses, above)
         }
-        if self.news.is_some() && !ctrl {
-            // what changed: ↑ ↓ scroll it, o opens the release's page, any other key closes it
-            match code {
-                KeyCode::Up => self.help_scroll = self.help_scroll.saturating_sub(1),
-                KeyCode::Down => self.help_scroll += 1,
-                KeyCode::Char('o') => {
-                    let url = self.news.as_ref().map(|n| crate::update::page(&n.0)).unwrap_or_default();
-                    if !crate::platform::open_url(&url) {
-                        self.set_note(tr!("The release: {url}", url = url));
-                    }
-                }
-                _ => {
-                    self.news = None;
-                    self.help_scroll = 0;
-                }
-            }
-            return;
-        }
-        if self.credits.is_some() && !ctrl {
-            // the credits panel: ↑ ↓ scroll it, s shares what it is about, any other key closes it
-            match code {
-                KeyCode::Up => self.help_scroll = self.help_scroll.saturating_sub(1),
-                KeyCode::Down => self.help_scroll += 1, // drawing keeps it within the page
-                KeyCode::Char('s') => {
-                    let it = self.credits.as_ref().map(|c| c.item.clone());
-                    self.share(it);
-                }
-                _ => {
-                    self.credits = None;
-                    self.help_scroll = 0;
-                }
-            }
-            return;
-        }
-        if self.help && !ctrl && code != KeyCode::Char('/') {
-            match code {
-                KeyCode::Up => self.help_scroll = self.help_scroll.saturating_sub(1),
-                KeyCode::Down => self.help_scroll += 1, // drawing keeps it within the page
-                _ => {
-                    self.help = false;
-                    self.help_scroll = 0;
-                }
-            }
+        if !ctrl && self.panel_key(code) {
             return;
         }
         if self.menu.is_some() {

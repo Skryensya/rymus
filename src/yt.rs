@@ -256,8 +256,11 @@ pub fn parse_album(v: &Value, album: &Item) -> Vec<Item> {
         .collect()
 }
 
-// A song's credits as YouTube Music lists them: (role, names), e.g. ("Produced by", ["Tony Berg", "Ethan Gruska"]).
-pub fn parse_credits(v: &Value) -> Vec<(String, Vec<String>)> {
+// Credits: (role, names), e.g. ("Produced by", ["Tony Berg", "Ethan Gruska"]).
+pub type Roles = Vec<(String, Vec<String>)>;
+
+// A song's credits as YouTube Music lists them.
+pub fn parse_credits(v: &Value) -> Roles {
     all(v, "dismissableDialogContentSectionRenderer")
         .into_iter()
         .map(|s| {
@@ -269,9 +272,8 @@ pub fn parse_credits(v: &Value) -> Vec<(String, Vec<String>)> {
         .collect()
 }
 
-// An album's: (what its page says about it, the credits of all its songs together, each name once per role).
-pub type Credits = Vec<(String, Vec<String>)>;
-fn merge(into: &mut Credits, more: Credits) {
+// Several songs' credits as one: each name once per role.
+fn merge(into: &mut Roles, more: Roles) {
     for (role, names) in more {
         let at = into.iter().position(|(r, _)| *r == role).unwrap_or_else(|| {
             into.push((role, vec![]));
@@ -462,11 +464,11 @@ impl Yt {
     pub fn album(&self, album: &Item) -> Result<Vec<Item>, String> {
         Ok(parse_album(&self.call("browse", json!({"browseId": album.id}))?, album))
     }
-    fn credits_of(&self, id: &str) -> Result<Credits, String> {
+    fn credits_of(&self, id: &str) -> Result<Roles, String> {
         Ok(parse_credits(&self.call("browse", json!({"browseId": format!("MPTC{id}")}))?))
     }
     // A song's credits. A music video has none of its own: then those of the song with its title, when there is one.
-    pub fn credits(&self, t: &Item) -> Result<Credits, String> {
+    pub fn credits(&self, t: &Item) -> Result<Roles, String> {
         let c = self.credits_of(&t.id)?;
         if !c.is_empty() {
             return Ok(c);
@@ -477,12 +479,13 @@ impl Yt {
             None => Ok(c),
         }
     }
-    pub fn album_credits(&self, album: &Item) -> Result<(Vec<String>, Credits), String> {
+    // An album's: (what its page says about it, the credits of all its songs together).
+    pub fn album_credits(&self, album: &Item) -> Result<(Vec<String>, Roles), String> {
         let page = self.call("browse", json!({"browseId": album.id}))?;
         let mut about: Vec<String> = first(&page, "musicResponsiveHeaderRenderer").map_or(vec![], |h| vec![text(&h["subtitle"]), text(&h["secondSubtitle"])]);
         about.extend(first(&page, "musicDescriptionShelfRenderer").map(|d| text(&d["description"])));
         about.retain(|s| !s.is_empty());
-        let mut all = Credits::new();
+        let mut all = Roles::new();
         for t in parse_album(&page, album) {
             merge(&mut all, self.credits(&t).unwrap_or_default()); // a song that fails leaves the rest
         }
