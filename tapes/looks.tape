@@ -26,11 +26,14 @@ Show
 # as it comes, on Home: the color of the cover, the player below, rounded frames
 Sleep 2s
 Screenshot docs/look-cover.png
-# Config, onto Color
+# Config: Look, then onto Color
 Tab@150ms 7
 Sleep 1s
-Up@50ms 12
-Down@150ms 10
+Down
+Sleep 300ms
+Right
+Sleep 300ms
+Down
 Sleep 800ms
 # purple, the player on top, heavy borders
 Right@250ms 10
@@ -47,8 +50,11 @@ Screenshot docs/look-top.png
 # white, back below, double lines
 Tab@150ms 7
 Sleep 800ms
-Up@50ms 12
-Down@150ms 10
+Down
+Sleep 300ms
+Right
+Sleep 300ms
+Down
 Right@300ms 3
 Sleep 600ms
 Down
