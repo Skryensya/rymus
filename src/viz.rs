@@ -42,9 +42,17 @@ pub type Db = [f64; BANDS];
 pub struct Feed {
     rest: Vec<u8>,
     queue: VecDeque<(f64, Db)>,
+    resumed: bool,            // taken over from a player left playing (a restart): its first second may be missing
+    lead: Option<(f64, f64)>, // (seconds missing, the position they went missing at): see at()
 }
 
+// How long the bars take to come back in step after measurements went missing.
+const CATCH_UP: f64 = 2.0;
+
 impl Feed {
+    pub fn resumed() -> Feed {
+        Feed { resumed: true, ..Default::default() }
+    }
     pub fn push(&mut self, chunk: &[u8]) {
         self.rest.extend_from_slice(chunk);
         let Some(end) = self.rest.iter().rposition(|&b| b == b'\n') else { return };
@@ -56,6 +64,7 @@ impl Feed {
                 // the last second of the previous one; keep one queue per file if that ever shows
                 if self.queue.back().is_some_and(|last| t < last.0 - 0.5) {
                     self.queue.clear();
+                    self.lead = None;
                 }
                 self.queue.push_back((t, [-120.0; BANDS]));
                 if self.queue.len() > 3000 {
@@ -76,7 +85,25 @@ impl Feed {
     }
 
     // The loudest value of each band among the measurements playback has just passed; None if there is nothing new.
+    // After a restart the first second or so is missing: the drain read the measurements of the audio still waiting in
+    // the output buffer. Rather than flat bars until playback reaches what is left, those go by a little ahead of the
+    // sound, and the gap closes over CATCH_UP seconds of playback.
     pub fn at(&mut self, pos: f64) -> Option<Db> {
+        if let Some(first) = self.queue.front().filter(|_| self.resumed) {
+            self.resumed = false; // only the first measurements after taking over
+            let gap = first.0 - pos;
+            if gap > 0.3 && gap < 5.0 {
+                self.lead = Some((gap, pos));
+            }
+        }
+        let pos = match self.lead {
+            Some((gap, from)) if pos - from < CATCH_UP => pos + gap * (1.0 - (pos - from) / CATCH_UP),
+            Some(_) => {
+                self.lead = None; // back in step
+                pos
+            }
+            None => pos,
+        };
         let mut out: Option<Db> = None;
         while self.queue.front().is_some_and(|f| f.0 <= pos) {
             let (_, db) = self.queue.pop_front()?;
@@ -144,6 +171,15 @@ mod tests {
         assert_eq!(feed.at(5.0).unwrap()[0], -20.0);
         assert_eq!((energy(&[-120.0; BANDS]), energy(&[-10.0; BANDS])), (0.0, 1.0));
         assert!(energy(&[-45.0; BANDS]) < 0.5);
+        // after a restart the first second is missing: shown a little early, back in step within CATCH_UP
+        let mut feed = Feed::resumed();
+        feed.push((0..40).map(|i| frame(17.2 + i as f64 * 0.1, -10)).collect::<String>().as_bytes());
+        assert!(feed.at(16.2).is_some(), "not flat while playback is short of the first measurement");
+        assert!(feed.at(16.2 + CATCH_UP / 2.0).is_some());
+        assert!(feed.lead.is_some());
+        let _ = feed.at(16.2 + CATCH_UP + 0.1);
+        assert!(feed.lead.is_none(), "in step again");
+        assert!(feed.at(30.0).is_some() && feed.at(30.0).is_none(), "nothing shown twice");
         let mut levels = Levels::default();
         let loud = levels.next(&heard, &[0.0; BANDS]);
         assert_eq!((loud[0], loud[1]), (1.0, 0.0));

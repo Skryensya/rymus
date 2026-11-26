@@ -226,7 +226,7 @@ fn run() -> Result<(), String> {
     trace("mpv spawned");
 
     // the visualizer's measurements
-    let feed = Arc::new(Mutex::new(viz::Feed::default()));
+    let feed = Arc::new(Mutex::new(if left.is_some() { viz::Feed::resumed() } else { viz::Feed::default() }));
     let sink = feed.clone();
     std::thread::spawn(move || {
         platform::urgent_thread();
