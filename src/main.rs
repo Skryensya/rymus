@@ -228,6 +228,7 @@ fn run() -> Result<(), String> {
     let feed = Arc::new(Mutex::new(viz::Feed::default()));
     let sink = feed.clone();
     std::thread::spawn(move || {
+        platform::urgent_thread();
         let mut buf = [0u8; 16 * 1024];
         while let Ok(n @ 1..) = measurements.read(&mut buf) {
             sink.lock().unwrap_or_else(|e| e.into_inner()).push(&buf[..n]);

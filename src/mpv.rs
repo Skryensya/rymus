@@ -5,6 +5,11 @@ use serde_json::Value;
 use std::io::Write;
 use std::process::{Child, Command, Stdio};
 
+// How far ahead of what you hear the audio is decoded and filtered. mpv's default (0.2 s) runs dry when the machine is
+// busy, because the visualizer's analyser runs in the same audio thread: measured silently with 16 to 32 busy cores,
+// 0.2 s stuttered and 0.5 s did not. Larger would make equalizer changes slower to be heard.
+const AUDIO_BUFFER: &str = "--audio-buffer=0.5";
+
 pub struct Mpv {
     child: Option<Child>, // None: started by an earlier run
     writer: Option<Output>,
@@ -24,6 +29,7 @@ impl Mpv {
             .arg(format!("--input-ipc-server={path}"))
             // open the next entry early and buffer its first seconds
             .args(["--prefetch-playlist=yes", "--demuxer-readahead-secs=30"])
+            .arg(AUDIO_BUFFER)
             .arg(format!("--volume={volume}"));
         if let Ok(extra) = std::env::var("YM_MPV_ARGS") {
             cmd.args(extra.split_whitespace()); // e.g. YM_MPV_ARGS=--ao=null for silent runs
@@ -49,6 +55,7 @@ impl Mpv {
         cmd.args(["--pause", "--no-video", "--no-terminal", "--hr-seek=yes", "--media-controls=no", "--input-media-keys=no"])
             .arg(format!("--input-ipc-server={path}"))
             .arg(format!("--ytdl-format={format}"))
+            .arg(AUDIO_BUFFER)
             .arg(format!("--start={from:.2}"))
             .arg(format!("--length={:.2}", secs + 0.5))
             .arg(format!("--volume={volume}"))

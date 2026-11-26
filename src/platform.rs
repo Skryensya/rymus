@@ -110,6 +110,7 @@ mod unix {
     // rymus says it is back.
     pub fn drain(socket: &str) {
         std::thread::spawn(|| {
+            urgent_thread();
             let mut buf = [0u8; 16 * 1024];
             let mut input = std::io::stdin().lock();
             while matches!(input.read(&mut buf), Ok(1..)) {}
@@ -122,6 +123,15 @@ mod unix {
         }
     }
 
+    // The thread that reads the visualizer's measurements goes first when the machine is busy: if it falls behind, the
+    // pipe fills and mpv's audio waits for it.
+    pub fn urgent_thread() {
+        #[cfg(target_os = "macos")]
+        // SAFETY: only changes how this thread is scheduled
+        unsafe {
+            libc::pthread_set_qos_class_self_np(libc::qos_class_t::QOS_CLASS_USER_INTERACTIVE, 0);
+        }
+    }
     pub fn watch_for_quit() {
         extern "C" fn on_signal(_: libc::c_int) {
             QUIT.store(true, Ordering::Relaxed);
