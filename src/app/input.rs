@@ -405,6 +405,17 @@ impl App {
         }
     }
 
+    fn toggle_wave(&mut self) {
+        self.wave = !self.wave;
+        self.db.set_setting("wave", if self.wave { "on" } else { "off" });
+        if !self.wave {
+            self.bands = [0.0; BANDS]; // nothing is drawn; the filter keeps measuring unseen
+        }
+        if self.tab == Tab::Config {
+            self.settings = config::rows(&self.db);
+        }
+        self.set_note(tr!("Visualizer {a}", a = if self.wave { tr!("on") } else { tr!("off") }));
+    }
     pub(super) fn command_key(&mut self, code: KeyCode, ch: Option<char>, shift: bool) {
         use KeyCode as K;
         // the trip's own keys: [ ] change the scene, . holds it, y shows the sung line
@@ -450,6 +461,7 @@ impl App {
             Some('Q') => return self.quit_keeping_music(),
             Some('r') => return self.cycle_repeat(),
             Some('E') => return self.open_eq(),
+            Some('W') => return self.toggle_wave(), // w alone steps through the styles
             Some('B') => return self.open_downloads(),
             Some('D') => return self.open_discover(),
             Some('V') => {
@@ -555,16 +567,16 @@ impl App {
                 self.lyrics = false;
             }
             K::Char('y') => self.toggle_lyrics(),
+            // w: the next way of drawing it (in the trip: whether it reacts to the music); W: on or off
+            K::Char('w') if self.full && self.trip_on => self.toggle_wave(),
+            K::Char('w') if !self.wave => self.toggle_wave(),
             K::Char('w') => {
-                self.wave = !self.wave;
-                self.db.set_setting("wave", if self.wave { "on" } else { "off" });
-                if !self.wave {
-                    self.bands = [0.0; BANDS]; // nothing is drawn; the filter keeps measuring unseen
-                }
+                let v = config::step(&self.db, "vizstyle", 1);
+                self.apply_setting("vizstyle", v);
                 if self.tab == Tab::Config {
                     self.settings = config::rows(&self.db);
                 }
-                self.set_note(tr!("Visualizer {a}", a = if self.wave { tr!("on") } else { tr!("off") }));
+                self.set_note(tr!("Visualizer style: {a}", a = crate::i18n::t(v)));
             }
             K::Char('q') => self.quit = true,
             K::Char('z') => self.sleep_menu(),

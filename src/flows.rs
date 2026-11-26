@@ -580,7 +580,7 @@ fn the_config_tab_changes_settings_saves_them_and_tells_the_player() {
     ui.key(KeyCode::Down);
     ui.key(KeyCode::Right); // Audio quality: data saver
     assert!(ui.told().contains(&json!(["set_property", "ytdl-format", "worstaudio/worst"])));
-    ui.ch('w'); // the visualizer key and the Config row are the same setting
+    ui.ch('W'); // the visualizer key and the Config row are the same setting
     assert_eq!(ui.app.db.get_setting("wave").as_deref(), Some("off"));
     let wave = ui.screen().into_iter().find(|l| l.contains("Visualizer") && l.contains('[')).unwrap();
     assert!(wave.contains("[off]"), "{wave}");

@@ -390,9 +390,9 @@ Pixel art covers,Portadas pixel art
 "draw every cover as colored blocks, even where the terminal can show the image","dibuja cada portada con bloques de color, aunque la terminal pueda mostrar la imagen"
 Screen,Pantalla
 Visualizer,Visualizador
-the moving spectrum in the player (also w),el espectro en movimiento del reproductor (también w)
+the moving spectrum in the player (also W),el espectro en movimiento del reproductor (también W)
 Visualizer style,Estilo del visualizador
-"how the spectrum is drawn: dots rising, solid bars, a line of dots, or a mirror growing from the middle","cómo se dibuja el espectro: puntos que suben, barras sólidas, una línea de puntos, o un espejo que crece desde el centro"
+"how the spectrum is drawn: dots rising, solid bars, a line of dots, or a mirror growing from the middle (also w, one after another)","cómo se dibuja el espectro: puntos que suben, barras sólidas, una línea de puntos, o un espejo que crece desde el centro (también w, uno tras otro)"
 Mode,Modo
 "match your terminal's background: every color is chosen to read well on it, the accent included","igual al fondo de tu terminal: cada color se elige para leerse bien en él, el de acento incluido"
 Look,Apariencia
@@ -715,3 +715,5 @@ Updates,Actualizaciones
 "once a day rymus asks GitHub for the name of its latest release, and tells you when there is a newer one; nothing about you is sent",una vez al día rymus le pregunta a GitHub el nombre de su última versión y te avisa si hay una más nueva; no se envía nada sobre ti
 "install the latest rymus in place of this one, if there is a newer one","instala el rymus más reciente en lugar de este, si hay uno más nuevo"
 "a song's file is ready (its path in ""path""; its cover, thumbnail and lyrics files in ""cover"", ""thumbnail"" and ""lyrics"", null when there are none)","el archivo de una canción está listo (su ruta en ""path""; su portada, miniatura y letra en ""cover"", ""thumbnail"" y ""lyrics"", null si no hay)"
+Visualizer style: {a},Estilo del visualizador: {a}
+visualizer style,estilo del visualizador

@@ -109,7 +109,7 @@ pub const HELP: [Section; 7] = [
     ("Song", &[("a", "add to queue"), ("m", "play next, more…"), ("l", "like song or album"), ("x", "dislike"), ("s", "save to playlist"), ("R", "radio"), ("o  O", "playing: album, artist"), ("F", "follow artist"), ("b", "download"), ("B", "downloads and your music")]),
     ("Queue & playlists", &[("d", "remove / delete"), ("J  K", "move in queue"), ("c", "clear the queue"), ("m", "rename, play")]),
     ("Search", &[("/", "search"), ("f", "filter this list"), (":", "any command"), ("← →", "result tabs"), ("↑ ↓", "past searches"), ("⌥⌫", "erase word"), ("ctrl U", "erase all"), ("paste link", "import playlist")]),
-    ("Views", &[("v", "full player"), ("V", "trip · [ ] scene · . hold"), ("y", "lyrics"), ("Y", "karaoke · f letters"), ("w", "visualizer on / off"), ("E", "equalizer")]),
+    ("Views", &[("v", "full player"), ("V", "trip · [ ] scene · . hold"), ("y", "lyrics"), ("Y", "karaoke · f letters"), ("w", "visualizer style"), ("W", "visualizer on / off"), ("E", "equalizer")]),
     ("More", &[("D", "discover"), ("z", "sleep timer"), ("u", "undo"), ("← → t", "Stats, Liked views"), ("q", "quit"), ("Q", "quit, music stays"), ("ctrl R", "restart")]),
 ];
 const MOUSE: &str = "mouse: click · double-click plays · right-click menu · drag the bar to seek";

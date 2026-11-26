@@ -144,7 +144,8 @@ Run it again after updating.
 | `v` | full player with the big cover |
 | `r` | repeat: the whole queue (album, playlist), this song, off |
 | `V` | trip: a full screen visualizer that follows the song · `[` `]` scene · `.` hold · `y` lyrics |
-| `w` | visualizer on or off |
+| `w` | the next visualizer style: dots, bars, line, mirror |
+| `W` | visualizer on or off |
 | `t` | in Stats: week, month, year |
 | `?` | all keys |
 | `q` / `Q` | quit / quit and leave the music playing |
