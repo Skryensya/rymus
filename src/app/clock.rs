@@ -19,6 +19,12 @@ impl App {
             self.redraw_at = None;
             need = true;
         }
+        // after the Mac sleeps, mpv's audio output can come back stuck: playing, but silent and with time standing
+        // still until it is opened again (a seek did it by hand). Reopened once per stall.
+        if playing && !self.reloaded && now.duration_since(self.apos.map_or(self.resumed, |(_, at)| at.max(self.resumed))) > Duration::from_secs(2) {
+            self.reloaded = true;
+            self.cmd(json!(["ao-reload"]));
+        }
         if self.wave {
             // move the bars at a steady pace; they fall to the baseline when nothing plays
             let db = self.apos.filter(|_| playing).and_then(|(p, at)| {

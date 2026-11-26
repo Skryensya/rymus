@@ -159,6 +159,7 @@ impl App {
                 match e["name"].as_str().unwrap_or("") {
                     "audio-pts" => {
                         self.apos = v.as_f64().map(|p| (p, Instant::now())); // the position being heard
+                        self.reloaded = false;
                         return false;
                     }
                     "time-pos" => {
@@ -191,6 +192,7 @@ impl App {
                     }
                     "pause" => {
                         self.paused = v.as_bool().unwrap_or(false);
+                        self.resumed = Instant::now();
                         if let Some(f) = &mut self.fading {
                             f.cmd(json!(["set_property", "pause", self.paused])); // the fade-out pauses with you
                         }
