@@ -9,6 +9,7 @@
 - **Nothing to sign in to.** It uses YouTube Music anonymously. Your likes, playlists and history live in one file on your computer; the services it talks to get only what each request needs (see [Your data](#your-data)).
 - **Light.** A single small binary drawing text, with `mpv` playing the music. No browser, no Electron, no ads, no video eating your battery.
 - **Made for the keyboard.** Every action is one key away, and the bar at the bottom always says which keys work right now. The mouse works too.
+- **Yours.** A fixed color or the cover's, the player on top or below, four border styles.
 - **It looks good in any terminal size.** From a small split pane to a full screen, every view rearranges itself instead of breaking.
 - **It learns from you, and tells you.** Discover and the radio rank new songs by your own listening; Stats shows the minutes, not a mystery score.
 - **More than a player.** Synced lyrics, karaoke, album and artist pages, a This is … playlist for any artist, crossfade, loudness levelling, a spectrum visualizer and a psychedelic one.
@@ -35,6 +36,15 @@ Crossfade, even out loudness, a data saver, pixel art covers — each changed wi
 
 ![The Config tab](docs/config.gif)
 
+### Make it yours
+The color can follow the cover of what plays, or stay the one you pick. The player can sit under the lists or above them, and the frames can be rounded, square, heavy or double. All of it is in Config, under Look, and changes the moment you press `←` `→`.
+
+![Changing the color, the player's place and the borders in Config](docs/looks.gif)
+
+| As it comes | Purple, player on top, heavy | White, double lines |
+|---|---|---|
+| ![The cover's color, the player below, rounded frames](docs/look-cover.png) | ![A fixed purple, the player above the lists, heavy frames](docs/look-top.png) | ![A fixed white, double-line frames](docs/look-double.png) |
+
 ### Any size
 In a small window Home becomes one column, every list keeps its headings in sight, and nothing spills over the edges.
 
@@ -45,20 +55,20 @@ In a small window Home becomes one column, every list keeps its headings in sigh
 
 <sub>These recordings are made with [VHS](https://github.com/charmbracelet/vhs) from the scripts in [`tapes/`](tapes), on a fresh database with made-up history. In a terminal with the kitty graphics protocol (Ghostty, kitty, WezTerm) covers are sharp images; in the recordings they are coloured blocks.</sub>
 
-ymus rewritten in Rust. The original JavaScript version is frozen in the [`js`](https://github.com/Skryensya/ymus/tree/js) branch; both share the database in `~/.ymus`.
+ymus rewritten in Rust. The original JavaScript version is frozen in the [`js`](https://github.com/Skryensya/rymus/tree/js) branch; both share the database in `~/.ymus`.
 
 ## Install
 
 Needs `mpv`, `yt-dlp` and `ffmpeg`. Developed on macOS with Ghostty, and runs on Linux.
 
-On a Mac with Apple silicon, download the binary from [Releases](https://github.com/Skryensya/ymus/releases). It is not signed, so macOS may need `xattr -d com.apple.quarantine rymus` before the first run.
+On a Mac with Apple silicon, download the binary from [Releases](https://github.com/Skryensya/rymus/releases). It is not signed, so macOS may need `xattr -d com.apple.quarantine rymus` before the first run.
 
 To build it yourself you need a Rust toolchain:
 
 ```sh
 brew install mpv yt-dlp ffmpeg
-git clone https://github.com/Skryensya/ymus.git
-cd ymus
+git clone https://github.com/Skryensya/rymus.git
+cd rymus
 cargo install --path .
 rymus
 ```
@@ -120,7 +130,7 @@ Cover images use the kitty graphics protocol (Ghostty, kitty, WezTerm) and fall 
 
 **Stats** ranks your songs, artists and albums by minutes listened (never by play counts) over the last week, month or year, with a chart of each day (or month) and of the hours you listen at, when the screen has room.
 
-**Config** holds the settings in groups (Sound, Streaming, Screen, Output), each with all its choices in view. `↑` `↓` choose one, `←` `→` or `Enter` change it, and what it does is explained beside the list (with a picture of the overlap for Crossfade). Everything is kept for next time:
+**Config** holds the settings in groups (Sound, Streaming, Screen, Look, Output), each with all its choices in view. `↑` `↓` choose one, `←` `→` or `Enter` change it, and what it does is explained beside the list (with a picture of the overlap for Crossfade). Everything is kept for next time:
 
 | Setting | What it does |
 |---|---|
@@ -129,9 +139,13 @@ Cover images use the kitty graphics protocol (Ghostty, kitty, WezTerm) and fall 
 | Audio quality | *data saver* streams the smallest audio |
 | Pixel art covers | draws every cover as coloured blocks, even where the terminal can show the image |
 | Visualizer | the wave in the player (also `w`) |
+| Visualizer style | *dots* rising from the bottom, solid *bars*, a *line* of dots, or a *mirror* growing up and down from the middle |
+| Color | *from cover* takes the accent from what plays; or always green, blue, purple, pink, orange, yellow, red or white |
+| Player | *bottom* under the lists, or *top* above them (a very short window always keeps it at the bottom) |
+| Borders | rounded, square, heavy or double frames, the player's buttons included |
 | Pause on output change | pauses when headphones are unplugged (macOS) |
 
-**Lyrics** come from LRCLIB. With `y` you read and scroll them; synced lyrics highlight the line being sung. With `Y` they become karaoke: the line being sung in big braille letters (accents included), the one before and the one after small, and three dots under it that start empty and fill one by one, in equal steps, so they are all full just before the next line. Lines in scripts the braille font does not have are shown as plain text.
+**Lyrics** come from LRCLIB. With `y` you read and scroll them; synced lyrics highlight the line being sung. With `Y` they become karaoke: the line being sung in big braille letters (accents included), the one before and the one after small, and four dots under it that start empty and fill one by one, in equal steps, so they are all full just before the next line. Lines in scripts the braille font does not have are shown as plain text.
 
 ## Leaving it playing
 
@@ -142,6 +156,40 @@ Cover images use the kitty graphics protocol (Ghostty, kitty, WezTerm) and fall 
 ## Equalizer
 
 The **EQ** tab (`E`, or `Tab` past Config). On the left the profiles (Flat, Bass boost, Vocal, Rock and more): moving through them changes the sound at once, and each one says in words what it does ("More bass and treble"). On the right a slider per band on a ±12 dB scale, with the bass, mids and treble ranges marked under them. `→` or `Enter` goes onto the sliders: `← →` band, `↑ ↓` gain, `0` back to 0 dB, `Esc` back to the profiles; the band you are on says what it moves ("62 Hz · Bass: the weight of the kick drum and the bass guitar"). Moving a slider of a built-in profile saves your change as a copy ("My Rock"), so the built-in ones stay as they are. `n` makes a new profile from what you hear, `d` deletes one of yours. Boosts lower the overall level by as much, so they never distort.
+
+## Hooks
+
+Run your own commands on what happens. Put an executable in `~/.ymus/hooks/` named after the event:
+
+| Hook | When | Extra fields |
+|---|---|---|
+| `liked` | you like a song | |
+| `unliked` | you remove the like, or dislike a liked song | |
+| `disliked` | you dislike a song | |
+| `playlist-add` | you add one song to a playlist | `playlist` |
+| `playlist-remove` | you remove a song from a playlist | `playlist` |
+| `playing` | a song starts | |
+| `played` | it reaches its end | `seconds`, `duration` |
+| `skipped` | you move on before its end | `seconds`, `duration` |
+
+Each gets one JSON object on its standard input:
+
+```json
+{"event": "liked", "id": "…", "url": "https://music.youtube.com/watch?v=…", "title": "…", "artist": "…", "album": "…", "cover": "…"}
+```
+
+For example:
+
+```sh
+#!/bin/sh
+jq -r '.artist + " - " + .title + " " + .url' >> ~/liked-songs.txt
+```
+
+Then `chmod +x ~/.ymus/hooks/liked`. Hooks run in the background and are not stopped when you quit. What they print goes to `~/.ymus/hooks.log`, and rymus tells you if one fails.
+
+- Playback hooks only run while `rymus` is open (not while the music plays on after `Q`), and a song on repeat reports its end only when it stops repeating.
+- Importing a playlist, saving a whole queue as one, or deleting a playlist runs nothing.
+- Two events close together may finish in either order.
 
 ## Your data
 

@@ -141,6 +141,7 @@ pub struct Geo {
     pub tabs: Vec<(usize, usize, usize)>,
     pub top: usize, // first screen row inside the body frame (below the tab bar, the search box and the frame border)
     pub field_x1: usize,
+    pub field_y1: usize, // last screen row of the search field
     pub bar_row: usize,
     pub bar_x0: usize,
     pub bar_w: usize,
@@ -380,6 +381,7 @@ pub struct App {
     pub queue: Vec<Item>,
     pub pos: i64,
     pub paused: bool,
+    sounding: Option<Item>, // the song mpv has loaded, for the hooks (the queue may already be another)
     pub repeat: Repeat, // as mpv reports it, so it is right after re-attaching too
     pub loading: bool,
     endless: bool,        // keep adding similar songs as the queue runs out
@@ -399,6 +401,9 @@ pub struct App {
     pub dislikes: HashSet<String>,
 
     pub wave: bool,
+    pub accent: Option<crate::ui::Rgb>, // a fixed accent color (Config); None takes it from the cover
+    pub player_top: bool,
+    pub viz_style: usize, // how the player's spectrum is drawn: dots, bars, line, mirror    // the dock above the lists instead of under them
     fade: f64,            // crossfade seconds, 0 = off
     tail: Option<Mpv>,    // the crossfade's second player, waiting on this song's end
     fading: Option<Mpv>,  // the one playing the last song's end
@@ -453,9 +458,9 @@ impl App {
             stat_rows: vec![], timeline: Default::default(), hours: vec![], totals: [0; 3], stat_cat: 0, period: 0, stats_at: now, heard: 0.0, raw_pos: None, play_dur: 0.0,
             endless: false, generation: 0, filling: None, removed: HashSet::new(), result_lists: HashSet::new(),
             naming: None, playlists: vec![], playlists_sel: 0, playlist_views: HashMap::new(), importing: false,
-            queue: vec![], pos: -1, paused: false, repeat: Repeat::Off, loading: false, time: 0, dur: 0.0, vol, play_id: None,
+            queue: vec![], pos: -1, paused: false, sounding: None, repeat: Repeat::Off, loading: false, time: 0, dur: 0.0, vol, play_id: None,
             direct: HashSet::new(), streams: HashMap::new(), resolving: HashSet::new(), session, likes, dislikes,
-            wave, fade: 0.0, tail: None, fading: None, crossing: false, faded: false, format: config::format("best"), settings: vec![], apos: None, levels: Default::default(), bands: [0.0; BANDS], energy: 0.0, trip_on: false, trip: Show::default(), trip_lyrics, trip_t: 0.0, trip_at: now,
+            wave, accent: None, player_top: false, viz_style: 0, fade: 0.0, tail: None, fading: None, crossing: false, faded: false, format: config::format("best"), settings: vec![], apos: None, levels: Default::default(), bands: [0.0; BANDS], energy: 0.0, trip_on: false, trip: Show::default(), trip_lyrics, trip_t: 0.0, trip_at: now,
             covers: HashMap::new(), rasters: HashMap::new(), kitty: cover::supported(), shown: String::new(), shown_head: String::new(), want: String::new(), want_at: now,
             redraw_at: None, theme: Default::default(), lyric_cache: HashMap::new(),
             mq: Default::default(), geo: Default::default(), drag: false, last_click: None, last_seek: now, last_wheel: now,

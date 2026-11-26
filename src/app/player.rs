@@ -39,6 +39,10 @@ impl App {
                 self.fade = config::fade_secs(v);
                 self.apply_fade();
             }
+            "vizstyle" => self.viz_style = config::choices("vizstyle").iter().position(|c| *c == v).unwrap_or(0),
+            "accent" => self.accent = config::accent(v),
+            "player" => self.player_top = v == "top",
+            "border" => crate::ui::set_border(config::choices("border").iter().position(|c| *c == v).unwrap_or(0)),
             "pixel" => self.kitty = cover::supported() && v == "off", // the half-block drawing is used wherever kitty is false
             "normalize" => self.cmd(if v == "on" { json!(["af", "add", config::NORMALIZE]) } else { json!(["af", "remove", "@norm"]) }),
             "quality" => {
@@ -119,6 +123,20 @@ impl App {
         self.play_id = None;
     }
 
+    // The song that was sounding is over: "played" if it reached its end, "skipped" if you moved on before.
+    fn song_over(&mut self, reason: &str) {
+        let event = match reason {
+            "eof" => "played",
+            "stop" if self.crossing => "played", // the crossfade moves on while the last seconds still sound
+            "stop" => "skipped",
+            _ => return, // quitting, or it could not be played
+        };
+        if let Some(t) = self.sounding.take() {
+            let extra = json!({"seconds": self.heard.round() as i64, "duration": self.play_dur.round() as i64});
+            self.hook(event, &t, extra);
+        }
+    }
+
     // False when nothing on screen changed.
     pub(super) fn on_mpv(&mut self, e: &Value) -> bool {
         match e["event"].as_str().unwrap_or("") {
@@ -190,6 +208,10 @@ impl App {
                         self.pos = v.as_i64().unwrap_or(-1);
                         self.time = 0;
                         self.dur = 0.0;
+                        // after a restart the song was already loaded: it is the one being counted
+                        if self.sounding.is_none() && self.play_id.is_some() {
+                            self.sounding = self.now().cloned();
+                        }
                     }
                     _ => return false,
                 }
@@ -208,8 +230,10 @@ impl App {
                 self.loading = false;
                 self.heard = 0.0;
                 self.raw_pos = None;
-                if let Some(t) = self.now() {
+                self.sounding = self.now().cloned();
+                if let Some(t) = &self.sounding {
                     self.play_id = Some(self.db.start_play(t, now_ms()));
+                    self.hook("playing", t, json!({}));
                 }
                 self.sync_eq();
                 self.preload();
@@ -222,6 +246,7 @@ impl App {
             "end-file" => {
                 self.loading = false;
                 let reason = e["reason"].as_str().unwrap_or("");
+                self.song_over(reason);
                 self.log_end(reason);
                 if reason == "error" {
                     self.msg = match e["file_error"].as_str() {

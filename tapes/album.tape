@@ -11,7 +11,7 @@ Show
 Sleep 1s
 Type "/"
 Sleep 300ms
-Type "random access memories"
+Type "rumours fleetwood mac"
 Sleep 500ms
 Enter
 Sleep 4s

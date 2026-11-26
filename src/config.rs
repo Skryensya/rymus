@@ -10,12 +10,16 @@ pub struct Setting {
     pub group: &'static str, // a heading over it when it differs from the one before
 }
 
-pub const SETTINGS: [Setting; 6] = [
+pub const SETTINGS: [Setting; 10] = [
     Setting { key: "fade", label: "Crossfade", choices: &["off", "2 s", "4 s", "6 s", "8 s", "12 s"], hint: "the end of each song plays over the start of the next one, one fading out while the other fades in", group: "Sound" },
     Setting { key: "normalize", label: "Even out loudness", choices: &["off", "on"], hint: "quiet and loud songs play at a similar level", group: "Sound" },
     Setting { key: "quality", label: "Audio quality", choices: &["best", "data saver"], hint: "data saver streams the smallest audio there is, for slow or metered connections", group: "Streaming" },
     Setting { key: "pixel", label: "Pixel art covers", choices: &["off", "on"], hint: "draw every cover as colored blocks, even where the terminal can show the image", group: "Screen" },
     Setting { key: "wave", label: "Visualizer", choices: &["on", "off"], hint: "the moving spectrum in the player (also w)", group: "Screen" },
+    Setting { key: "vizstyle", label: "Visualizer style", choices: &["dots", "bars", "line", "mirror"], hint: "how the spectrum is drawn: dots rising, solid bars, a line of dots, or a mirror growing from the middle", group: "Screen" },
+    Setting { key: "accent", label: "Color", choices: &["from cover", "green", "blue", "purple", "pink", "orange", "yellow", "red", "white"], hint: "the color of the frames, the selection and the player: taken from what plays, or always the same", group: "Look" },
+    Setting { key: "player", label: "Player", choices: &["bottom", "top"], hint: "where the player sits: under the lists, or above them", group: "Look" },
+    Setting { key: "border", label: "Borders", choices: &["rounded", "square", "heavy", "double"], hint: "how the frames and the player's buttons are drawn", group: "Look" },
     Setting { key: "outputpause", label: "Pause on output change", choices: &["on", "off"], hint: "pause when headphones are unplugged or the audio output changes", group: "Output" },
 ];
 
@@ -70,6 +74,21 @@ pub fn fade_in(secs: f64) -> String {
     format!("min(1,t/{secs})") // t restarts at 0 with every song
 }
 
+// A fixed accent color, or None to take it from the cover of what plays.
+pub fn accent(v: &str) -> Option<[u8; 3]> {
+    Some(match v {
+        "green" => crate::ui::GREEN,
+        "blue" => [130, 170, 250],
+        "purple" => [190, 150, 245],
+        "pink" => [245, 150, 200],
+        "orange" => [250, 170, 100],
+        "yellow" => [240, 210, 120],
+        "red" => [240, 120, 120],
+        "white" => [225, 225, 225],
+        _ => return None,
+    })
+}
+
 pub const NORMALIZE: &str = "@norm:lavfi=graph=%16%dynaudnorm=f=500";
 
 pub fn format(quality: &str) -> &'static str {
@@ -96,7 +115,7 @@ mod tests {
         assert_eq!(value(&db, "quality"), "best");
         let rows = rows(&db);
         assert_eq!(rows.iter().filter(|r| r.kind == Kind::Setting).count(), SETTINGS.len());
-        assert_eq!(rows.iter().filter(|r| r.kind == Kind::Header).map(|r| r.title.as_str()).collect::<Vec<_>>(), ["Sound", "Streaming", "Screen", "Output"]);
+        assert_eq!(rows.iter().filter(|r| r.kind == Kind::Header).map(|r| r.title.as_str()).collect::<Vec<_>>(), ["Sound", "Streaming", "Screen", "Look", "Output"]);
     }
 
     #[test]

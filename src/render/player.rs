@@ -68,7 +68,8 @@ impl App {
 
     // The player dock: cover, title, artist, wave and progress in r content rows.
     #[allow(clippy::too_many_arguments)]
-    pub(super) fn dock(&mut self, g: &mut Geo, w: usize, l: usize, r: usize, focus: Option<&Item>, got: Option<&Arc<Got>>, a: Rgb) -> (Vec<String>, Option<(usize, usize, usize)>) {
+    // `first` is the screen row of its first line inside the frame.
+    pub(super) fn dock(&mut self, g: &mut Geo, w: usize, first: usize, r: usize, focus: Option<&Item>, got: Option<&Arc<Got>>, a: Rgb) -> (Vec<String>, Option<(usize, usize, usize)>) {
         let iw = w - 2;
         let url = focus.map(|f| f.cover.clone()).unwrap_or_default();
         let thumb = !url.is_empty() && !self.full; // the full player already shows the big cover
@@ -79,80 +80,59 @@ impl App {
             Some(got) if thumb && !self.kitty => self.cells(&url, got, c, r),
             _ => None,
         };
-        let geo = (thumb && self.kitty).then_some((l + g.top + 2, 3, c));
+        let geo = (thumb && self.kitty).then_some((first, 3, c));
         let blank = spaces(tx);
         let now = self.now().cloned();
-        // the buttons (⏮ ⏯ ⏭, boxed) take the top right corner when there is room; the text keeps the rest
-        let buttons = tx >= 50;
-        let bw_buttons = if buttons { 21 } else { 0 }; // four boxes of 5 and a space before them
-        let tx_top = tx - bw_buttons; // width of the text beside the buttons
+        // the buttons (« ‖ » ↻) are small icons at the start of the progress line, so the song and the visualizer get
+        // the whole width; the cover is a play/pause button too
+        let buttons = tx >= 36;
         let status = if self.loading { spin() } else if self.paused { "⏸" } else { "▶" };
         let count = now.as_ref().map_or(String::new(), |_| format!(" {}/{}", self.pos + 1, self.queue.len()));
+        let vol = format!("vol {}", self.vol);
         let (r0, r1) = if let Some(t) = &now {
             // without buttons, the state shows before the title
             let lead = if buttons { String::new() } else { format!("{status} ") };
-            let line = cut(&format!("{lead}{}{}", self.tag(&t.id), t.title), tx_top.saturating_sub(count.len()));
+            let line = cut(&format!("{lead}{}{}", self.tag(&t.id), t.title), tx.saturating_sub(count.len()));
             let mut chars = line.chars();
             let head = chars.next().unwrap_or(' ').to_string();
             let head = if buttons { fg(a, &bold(&head)) } else { fg(a, &head) }; // with buttons, it is the title's first letter
-            let r0 = format!(
-                "{}{}{}{}",
-                head,
-                self.paint(&t.id, &bold(chars.as_str())),
-                spaces(tx_top.saturating_sub(width(&line) + count.len())),
-                dim(&count)
-            );
+            let r0 = format!("{}{}{}{}", head, self.paint(&t.id, &bold(chars.as_str())), spaces(tx.saturating_sub(width(&line) + count.len())), dim(&count));
             let album = if t.album.is_empty() { String::new() } else { format!(" · {}", t.album) };
             let indent = if buttons { "" } else { "  " };
-            (r0, dim(&cell(&format!("{indent}{}{album}", t.artist), tx_top)))
+            let room = tx.saturating_sub(vol.len() + 1);
+            (r0, format!("{} {}", dim(&cell(&format!("{indent}{}{album}", t.artist), room)), dim(&vol)))
         } else if let Some((q, time)) = self.session.as_ref().and_then(|s| s.queue.first().map(|q| (q, s.time))) {
-            (
-                fg(a, &cell(&format!("{} — {}", q.title, q.artist), tx_top)),
-                dim(&cell(&format!("stopped at {} · resume it from Home", fmt(time as f64)), tx_top)),
-            )
+            (fg(a, &cell(&format!("{} — {}", q.title, q.artist), tx)), dim(&cell(&format!("stopped at {} · resume it from Home", fmt(time as f64)), tx)))
         } else {
             match focus {
-                Some(f) => (bold(&cell(&f.title, tx_top)), dim(&cell(if f.artist.is_empty() { &f.author } else { &f.artist }, tx_top))),
-                None => (dim(&cell("Nothing playing", tx_top)), spaces(tx_top)),
+                Some(f) => (bold(&cell(&f.title, tx)), dim(&cell(if f.artist.is_empty() { &f.author } else { &f.artist }, tx))),
+                None => (dim(&cell("Nothing playing", tx)), spaces(tx)),
             }
         };
+        let first_x = 3 + tw; // screen column of the text's first character
+        let controls = if buttons { self.controls(g, first_x, first + r - 1, a) } else { String::new() };
+        let cw = if buttons { 13 } else { 0 }; // four buttons of 3 and a space
         let left = format!("{} ", fmt(if now.is_some() { self.time as f64 } else { 0.0 }));
         let length = if now.is_some() && self.dur > 0.0 { fmt(self.dur) } else { "--:--".into() };
-        let right = cut(&format!(" {length}   vol {}", self.vol), tx.saturating_sub(left.len()));
-        let bw = tx.saturating_sub(left.len() + width(&right));
+        let right = cut(&format!(" {length}"), tx.saturating_sub(cw + left.len()));
+        let bw = tx.saturating_sub(cw + left.len() + width(&right));
         let filled = if self.dur > 0.0 && bw > 0 { ((bw - 1) as f64 * (self.time as f64 / self.dur).min(1.0)).round() as usize } else { 0 };
-        let progress = if now.is_some() && bw > 0 {
-            format!(
-                "{}{}{}{}",
-                dim(&left),
-                fg(a, &format!("{}●", "━".repeat(filled))),
-                dim(&format!("{}{right}", "─".repeat(bw - 1 - filled))),
-                spaces(tx.saturating_sub(left.len() + bw + width(&right)))
-            )
+        let bar = if now.is_some() && bw > 0 {
+            format!("{}{}{}", dim(&left), fg(a, &format!("{}●", "━".repeat(filled))), dim(&format!("{}{right}", "─".repeat(bw - 1 - filled))))
         } else {
-            blank.clone()
+            spaces(tx - cw)
         };
-        g.bar_row = l + g.top + 1 + r;
-        g.bar_x0 = 2 + tw + left.len();
+        let progress = format!("{controls}{bar}");
+        g.bar_row = first + r - 1;
+        g.bar_x0 = first_x - 1 + cw + left.len();
         g.bar_w = bw;
-        let first = l + g.top + 2; // screen row of the dock's first line
-        g.thumb = thumb.then_some((3, 2 + c, first, l + g.top + 1 + r));
-        // the buttons are their own click areas; without them, a click on the title line plays or pauses
+        g.thumb = thumb.then_some((3, 2 + c, first, first + r - 1));
+        // without buttons, a click on the title line plays or pauses
         g.now_row = if buttons { 0 } else { first };
-        let boxes = if buttons { self.control_boxes(g, 3 + tw + tx_top + 1, first, a) } else { vec![] };
-        let middle = if self.wave && now.is_some() { spectrum(&self.bands, tx_top, r - 3, a) } else { vec![spaces(tx_top); r - 3] };
-        let inner: Vec<String> = std::iter::once(r0)
-            .chain(std::iter::once(r1))
+        let middle = if self.wave && now.is_some() { spectrum(&self.bands, tx, r - 3, a, self.viz_style) } else { vec![blank.clone(); r - 3] };
+        let inner: Vec<String> = [r0, r1]
+            .into_iter()
             .chain(middle)
-            .enumerate()
-            .map(|(i, row)| {
-                // beside the buttons on their 3 rows, blank under them
-                let right = match boxes.get(i) {
-                    Some(b) => format!(" {b}"),
-                    None => spaces(bw_buttons),
-                };
-                row + &right
-            })
             .chain(std::iter::once(progress))
             .enumerate()
             .map(|(i, row)| {
@@ -164,9 +144,10 @@ impl App {
         (frame(title, TXT, &inner, w, GRAY), geo)
     }
 
-    // The four boxed buttons (previous, play or pause, next, repeat) as 3 rows of 20 columns, starting at screen column x and
-    // row y; each box is recorded as its own click area. Play or pause is in the accent colour, and spins while loading.
-    fn control_boxes(&self, g: &mut Geo, x: usize, y: usize, a: Rgb) -> Vec<String> {
+    // The four buttons (previous, play or pause, next, repeat) as 13 columns: each icon with a space either side, then a
+    // space. Starts at screen column x on row y; each is recorded as its own click area. Play or pause is in the accent
+    // colour and spins while loading; the others are dim, repeat lit when on.
+    fn controls(&self, g: &mut Geo, x: usize, y: usize, a: Rgb) -> String {
         let gl = glyphs();
         let play = if self.loading { spin() } else if self.now().is_some() && !self.paused { gl.pause } else { gl.play };
         let (repeat, rc) = match self.repeat {
@@ -174,16 +155,13 @@ impl App {
             Repeat::All => (gl.repeat, a),
             Repeat::One => (gl.repeat_one, a),
         };
-        let buttons = [(Control::Prev, gl.prev, TXT), (Control::PlayPause, play, a), (Control::Next, gl.next, TXT), (Control::Repeat, repeat, rc)];
-        let mut rows = [String::new(), String::new(), String::new()];
+        let buttons = [(Control::Prev, gl.prev, GRAY), (Control::PlayPause, play, a), (Control::Next, gl.next, GRAY), (Control::Repeat, repeat, rc)];
+        let mut out = String::new();
         for (k, (control, icon, color)) in buttons.into_iter().enumerate() {
-            let border = if control == Control::PlayPause || (control == Control::Repeat && self.repeat != Repeat::Off) { a } else { GRAY };
-            rows[0] += &fg(border, "╭───╮");
-            rows[1] += &format!("{}{}{}", fg(border, "│ "), fg(color, &cell(icon, 1)), fg(border, " │"));
-            rows[2] += &fg(border, "╰───╯");
-            g.controls.push((control, x + 5 * k, x + 5 * k + 4, y, y + 2));
+            out += &format!(" {} ", fg(color, &cell(icon, 1)));
+            g.controls.push((control, x + 3 * k, x + 3 * k + 2, y, y));
         }
-        rows.to_vec()
+        out + " "
     }
 
     // On a short screen the player is two plain lines (three with the wave) instead of the framed dock.
@@ -213,7 +191,7 @@ impl App {
             }),
         }
         if self.wave {
-            lines.push(if now.is_some() { spectrum(&self.bands, w, 1, a).remove(0) } else { spaces(w) });
+            lines.push(if now.is_some() { spectrum(&self.bands, w, 1, a, self.viz_style).remove(0) } else { spaces(w) });
         }
         let left = format!("{} ", fmt(self.time as f64));
         let length = if self.dur > 0.0 { fmt(self.dur) } else { "--:--".into() };

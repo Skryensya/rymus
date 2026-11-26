@@ -47,6 +47,9 @@ impl App {
         match naming {
             Naming::New(tracks) => match self.db.create_playlist(&name, None, &tracks) {
                 Some(id) => {
+                    if let [t] = tracks.as_slice() {
+                        self.hook("playlist-add", t, json!({"playlist": name}));
+                    }
                     self.set_note(format!("Created {name}"));
                     self.playlists_changed();
                     self.point_at_playlist(id); // leave the cursor on what was just made

@@ -597,9 +597,9 @@ fn settings_are_applied_again_when_the_app_starts() {
 #[test]
 fn the_config_tab_shows_every_choice_and_explains_the_one_you_are_on() {
     let mut ui = Ui::new();
-    ui.size = (110, 34);
+    ui.size = (110, 46);
     open_config(&mut ui);
-    for heading in ["SOUND", "STREAMING", "SCREEN", "OUTPUT"] {
+    for heading in ["SOUND", "STREAMING", "SCREEN", "LOOK", "OUTPUT"] {
         assert!(ui.shows(heading), "{heading}\n{}", ui.screen().join("\n"));
     }
     assert!(ui.shows("[off]") && ui.shows(" 12 s "), "every choice is in view");
@@ -1209,24 +1209,25 @@ fn karaoke_keeps_five_columns_from_each_side() {
 }
 
 #[test]
-fn the_player_has_boxed_buttons_and_each_box_is_its_click_area() {
+fn the_player_buttons_are_small_icons_on_the_progress_line_and_each_is_its_click_area() {
     let mut ui = Ui::new();
     ui.play_a_result();
     let g = crate::ui::glyphs();
-    let screen = ui.screen().join("\n");
-    assert!(screen.contains(g.prev) && screen.contains(g.pause) && screen.contains(g.next), "{screen}");
-    assert!(screen.contains("╭───╮╭───╮╭───╮"), "three boxes side by side\n{screen}");
+    let screen = ui.screen();
+    let row = screen.iter().find(|l| l.contains(g.pause)).unwrap_or_else(|| panic!("{}", screen.join("\n")));
+    assert!(row.contains(g.prev) && row.contains(g.next) && row.contains("0:00"), "the buttons share the progress line: {row}");
+    assert!(!screen.join("\n").contains("╭───╮"), "no boxes");
     let (x, y) = ui.at(g.pause);
-    for (dx, dy) in [(0, 0), (-2, -1), (2, 1)] {
-        // the icon, the box's top left corner, its bottom right one
-        ui.click((x as i64 + dx) as usize, (y as i64 + dy) as usize);
-        assert!(ui.told().contains(&json!(["cycle", "pause"])), "a click at {dx},{dy} from the icon plays or pauses");
+    for dx in [-1, 0, 1] {
+        // the icon and a column either side of it
+        ui.click((x as i64 + dx) as usize, y);
+        assert!(ui.told().contains(&json!(["cycle", "pause"])), "a click at {dx} from the icon plays or pauses");
     }
     let (x, y) = ui.at(g.next);
     ui.click(x, y);
     assert!(ui.told().contains(&json!(["playlist-next"])));
     let (x, y) = ui.at(g.prev);
-    ui.click(x + 2, y + 1);
+    ui.click(x, y);
     assert!(ui.told().contains(&json!(["playlist-prev"])));
     let (_, y) = ui.at("1/6"); // the dock's title line
     ui.click(5, y); // is no longer a button
@@ -1239,8 +1240,8 @@ fn the_player_has_boxed_buttons_and_each_box_is_its_click_area() {
 fn a_narrow_player_has_no_buttons_and_its_title_line_plays_or_pauses() {
     let mut ui = Ui::new();
     ui.play_a_result();
-    ui.size = (44, 30);
-    assert!(!ui.shows("╭───╮"), "{}", ui.screen().join("\n"));
+    ui.size = (36, 30);
+    assert!(!ui.shows(crate::ui::glyphs().prev), "{}", ui.screen().join("\n"));
     let (x, y) = ui.at("▶ Result One");
     ui.click(x, y);
     assert!(ui.told().contains(&json!(["cycle", "pause"])));
@@ -1293,7 +1294,7 @@ fn repeat_goes_from_the_queue_to_the_song_to_off_by_key_and_button() {
     // the button does the same (the fourth box, right of next)
     let (x, y) = {
         let c = ui.app.geo.controls.iter().find(|c| c.0 == crate::app::Control::Repeat).expect("a repeat button");
-        (c.1 + 2, c.3 + 1)
+        (c.1 + 1, c.3)
     };
     ui.click(x, y);
     assert_eq!(ui.app.repeat, crate::app::Repeat::Off);
@@ -1303,4 +1304,150 @@ fn repeat_goes_from_the_queue_to_the_song_to_off_by_key_and_button() {
     ui.property("loop-file", json!(false));
     ui.property("loop-playlist", json!("inf"));
     assert_eq!(ui.app.repeat, crate::app::Repeat::All);
+}
+
+// ---------- player layout ----------
+#[test]
+fn the_visualizer_gets_the_whole_width_of_the_player() {
+    let mut ui = Ui::new();
+    ui.size = (140, 34);
+    ui.play_a_result();
+    ui.app.bands = [1.0; crate::viz::BANDS];
+    let rows = ui.screen();
+    let c = ui.app.geo.controls.clone();
+    assert_eq!(c.iter().map(|c| c.3).collect::<Vec<_>>(), [ui.app.geo.bar_row; 4], "the buttons sit on the progress line");
+    let title = rows.iter().position(|r| r.contains("Result One") && r.contains("1/")).expect("song and count on one line");
+    assert!(rows[title + 1].contains("vol 100"), "the volume under the count");
+    let wave = &rows[title + 2];
+    let drawn = wave.chars().filter(|c| !matches!(c, ' ' | '│')).count();
+    assert!(drawn > 120, "the visualizer spans the dock: {drawn} columns\n{wave}");
+    assert!(rows.iter().all(|r| r.chars().count() == 140), "every row exactly as wide as the screen");
+}
+
+// ---------- look ----------
+#[test]
+fn the_player_can_sit_on_top_and_still_answers_clicks() {
+    let mut ui = Ui::with(|db| db.set_setting("player", "top"));
+    ui.play_a_result();
+    let screen = ui.screen();
+    let player = screen.iter().position(|l| l.contains("Now playing")).unwrap();
+    let body = screen.iter().position(|l| l.contains("Results for")).unwrap();
+    assert!(player < body, "the player above the lists\n{}", screen.join("\n"));
+    assert!(screen.iter().all(|r| r.chars().count() == 100));
+    // its buttons, the search field and the lists still answer where they are drawn
+    let c = ui.app.geo.controls.iter().find(|c| c.0 == crate::app::Control::PlayPause).unwrap().clone();
+    ui.click(c.1 + 1, c.3);
+    assert!(ui.told().iter().any(|m| m.to_string().contains("pause")), "play/pause clicked");
+    let (x, y) = ui.at("Result Two");
+    ui.click(x, y);
+    assert_eq!(ui.app.cur().map(|i| i.title.as_str()), Some("Result Two"));
+    ui.click(5, 3);
+    assert!(ui.app.typing, "the search field");
+}
+
+#[test]
+fn a_fixed_color_and_another_border_style() {
+    let mut ui = Ui::with(|db| {
+        db.set_setting("accent", "blue");
+        db.set_setting("border", "heavy");
+    });
+    ui.play_a_result();
+    let _ = ui.screen();
+    assert_eq!(ui.app.theme.color, crate::config::accent("blue").unwrap());
+    assert!(ui.shows("┏━ / Search") && ui.shows("┃"), "{}", ui.screen().join("\n"));
+}
+
+// ---------- hooks ----------
+// Every hook writes the JSON it got to one file per event.
+fn hooks_into(ui: &Ui, events: &[&str], exit: u8) {
+    use std::os::unix::fs::PermissionsExt;
+    let hooks = ui.dir.join("hooks");
+    std::fs::create_dir_all(&hooks).unwrap();
+    for event in events {
+        let script = hooks.join(event);
+        std::fs::write(&script, format!("#!/bin/sh\ncat >> '{}'\nexit {exit}\n", ui.dir.join(format!("got-{event}")).display())).unwrap();
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+}
+// What a hook got so far, waiting for `n` of them.
+fn got(ui: &mut Ui, event: &str, n: usize) -> Vec<Value> {
+    let file = ui.dir.join(format!("got-{event}"));
+    let read = move || -> Vec<Value> { std::fs::read_to_string(&file).unwrap_or_default().lines().filter_map(|l| serde_json::from_str(l).ok()).collect() };
+    ui.wait(event, |_| read().len() >= n);
+    std::thread::sleep(Duration::from_millis(100)); // and no more than that
+    let all = read();
+    assert_eq!(all.len(), n, "{event}: {all:?}");
+    all
+}
+
+#[test]
+fn likes_and_dislikes_run_their_hooks() {
+    let mut ui = Ui::new();
+    hooks_into(&ui, &["liked", "unliked", "disliked"], 0);
+    ui.search("band");
+    ui.ch('l');
+    let liked = got(&mut ui, "liked", 1);
+    assert_eq!((liked[0]["event"].as_str(), liked[0]["id"].as_str(), liked[0]["title"].as_str()), (Some("liked"), Some("s1"), Some("Result One")));
+    assert_eq!(liked[0]["url"], "https://music.youtube.com/watch?v=s1");
+    ui.ch('l'); // remove it
+    got(&mut ui, "unliked", 1);
+    ui.ch('l');
+    got(&mut ui, "liked", 2);
+    ui.ch('x'); // disliking a liked song also removes the like
+    got(&mut ui, "unliked", 2);
+    got(&mut ui, "disliked", 1);
+    ui.ch('x'); // removing a dislike is no event
+    got(&mut ui, "disliked", 1);
+}
+
+#[test]
+fn a_failing_hook_is_told() {
+    let mut ui = Ui::new();
+    hooks_into(&ui, &["liked"], 3);
+    ui.search("band");
+    ui.ch('l');
+    ui.wait("the failure", |ui| ui.app.msg.contains("Hook liked failed"));
+}
+
+#[test]
+fn playback_hooks_tell_a_finished_song_from_a_skipped_one() {
+    let mut ui = Ui::new();
+    hooks_into(&ui, &["playing", "played", "skipped"], 0);
+    ui.play_a_result(); // loads the first song
+    assert_eq!(got(&mut ui, "playing", 1)[0]["id"], "s1");
+    ui.property("duration", json!(200.0));
+    ui.property("time-pos", json!(1.0));
+    ui.property("time-pos", json!(2.0));
+    ui.mpv_says(json!({"event": "end-file", "reason": "eof"}));
+    let played = got(&mut ui, "played", 1);
+    assert_eq!((played[0]["id"].as_str(), played[0]["seconds"].as_i64(), played[0]["duration"].as_i64()), (Some("s1"), Some(1), Some(200)));
+    ui.property("playlist-pos", json!(1));
+    ui.mpv_says(json!({"event": "file-loaded"}));
+    ui.search("again");
+    ui.key(KeyCode::Enter); // another song: the queue is already new when mpv reports the old one stopped
+    ui.mpv_says(json!({"event": "end-file", "reason": "stop"}));
+    assert_eq!(got(&mut ui, "skipped", 1)[0]["title"], "Similar A");
+    got(&mut ui, "played", 1);
+}
+
+#[test]
+fn playlist_hooks_name_the_playlist() {
+    let mut ui = Ui::new();
+    hooks_into(&ui, &["playlist-add", "playlist-remove"], 0);
+    ui.key(KeyCode::Tab);
+    ui.key(KeyCode::Enter); // + New playlist
+    ui.text("Radio");
+    ui.key(KeyCode::Enter);
+    ui.search("band");
+    ui.ch('s');
+    ui.key(KeyCode::Enter);
+    let added = got(&mut ui, "playlist-add", 1);
+    assert_eq!((added[0]["id"].as_str(), added[0]["playlist"].as_str()), (Some("s1"), Some("Radio")));
+    ui.ch('s');
+    ui.key(KeyCode::Enter); // already there: nothing new
+    got(&mut ui, "playlist-add", 1);
+    ui.key(KeyCode::Esc);
+    ui.key(KeyCode::Enter); // open Radio
+    ui.ch('d');
+    assert_eq!(got(&mut ui, "playlist-remove", 1)[0]["playlist"], "Radio");
 }

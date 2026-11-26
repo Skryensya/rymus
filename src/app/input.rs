@@ -131,7 +131,7 @@ impl App {
                     return true;
                 }
             }
-            if y >= 2 && y + 1 < self.geo.top && x <= self.geo.field_x1 {
+            if y >= 2 && y <= self.geo.field_y1 && x <= self.geo.field_x1 {
                 self.start_typing();
                 return true;
             }
@@ -174,21 +174,20 @@ impl App {
             M::Down(MouseButton::Left) => {
                 let g = &self.geo;
                 let on_thumb = g.thumb.is_some_and(|(x0, x1, y0, y1)| x >= x0 && x <= x1 && y >= y0 && y <= y1);
-                if y == g.bar_row {
-                    if self.dur > 0.0 && x > g.bar_x0 && x <= g.bar_x0 + g.bar_w {
-                        self.drag = true;
-                        self.seek_at(x);
-                    }
-                } else if on_thumb {
-                    self.full = !self.full;
-                    self.trip_on = false;
-                } else if let Some(&(control, ..)) = g.controls.iter().find(|&&(_, x0, x1, y0, y1)| x >= x0 && x <= x1 && y >= y0 && y <= y1) {
+                if let Some(&(control, ..)) = g.controls.iter().find(|&&(_, x0, x1, y0, y1)| x >= x0 && x <= x1 && y >= y0 && y <= y1) {
                     match control {
                         Control::Prev => self.cmd(json!(["playlist-prev"])),
                         Control::PlayPause => self.toggle_pause(),
                         Control::Next => self.cmd(json!(["playlist-next"])),
                         Control::Repeat => self.cycle_repeat(),
                     }
+                } else if y == g.bar_row {
+                    if self.dur > 0.0 && x > g.bar_x0 && x <= g.bar_x0 + g.bar_w {
+                        self.drag = true;
+                        self.seek_at(x);
+                    }
+                } else if on_thumb {
+                    self.toggle_pause(); // the cover is a play/pause button too
                 } else if y == g.now_row {
                     self.toggle_pause();
                 } else if self.full {

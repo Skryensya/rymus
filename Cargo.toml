@@ -4,7 +4,7 @@ version = "0.2.0"
 edition = "2021"
 description = "Search YouTube Music and play it inside your terminal"
 license = "MIT"
-repository = "https://github.com/Skryensya/ymus"
+repository = "https://github.com/Skryensya/rymus"
 
 [dependencies]
 crossterm = "0.28"                                    # raw mode, keys, mouse, resize

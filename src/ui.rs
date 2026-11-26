@@ -37,6 +37,22 @@ pub fn glyphs() -> &'static Glyphs {
     })
 }
 
+// The frames' line style, chosen in Config: rounded, square, heavy or double.
+// Per thread: the app draws on one, and each test runs on its own.
+thread_local!(static BORDER: std::cell::Cell<usize> = const { std::cell::Cell::new(0) });
+pub fn set_border(style: usize) {
+    BORDER.set(style);
+}
+// (top left, top right, bottom left, bottom right, across, down)
+pub fn border() -> [&'static str; 6] {
+    match BORDER.get() {
+        1 => ["┌", "┐", "└", "┘", "─", "│"],
+        2 => ["┏", "┓", "┗", "┛", "━", "┃"],
+        3 => ["╔", "╗", "╚", "╝", "═", "║"],
+        _ => ["╭", "╮", "╰", "╯", "─", "│"],
+    }
+}
+
 pub fn fgc([r, g, b]: Rgb) -> String {
     format!("\x1b[38;2;{r};{g};{b}m")
 }
@@ -163,15 +179,16 @@ pub fn tab_bar(w: usize, tabs: &[(String, &str)], active: usize, accent: Rgb) ->
 pub fn frame(title: &str, tcol: Rgb, inner: &[String], w: usize, color: Rgb) -> Vec<String> {
     let t = cut(title, w.saturating_sub(5));
     let b = |s: String| fg(color, &s);
+    let [tl, tr, bl, br, h, v] = border();
     let top = format!(
         "{}{}\x1b[1m{t}\x1b[22m\x1b[39m{}",
-        b("╭─ ".into()),
+        b(format!("{tl}{h} ")),
         fgc(tcol),
-        b(format!(" {}╮", "─".repeat(w.saturating_sub(5 + width(&t)))))
+        b(format!(" {}{tr}", h.repeat(w.saturating_sub(5 + width(&t)))))
     );
     let mut out = vec![top];
-    out.extend(inner.iter().map(|l| format!("{}{l}{}", b("│".into()), b("│".into()))));
-    out.push(b(format!("╰{}╯", "─".repeat(w.saturating_sub(2)))));
+    out.extend(inner.iter().map(|l| format!("{}{l}{}", b(v.into()), b(v.into()))));
+    out.push(b(format!("{bl}{}{br}", h.repeat(w.saturating_sub(2)))));
     out
 }
 
@@ -191,22 +208,52 @@ pub fn hints(list: &[(&str, &str)], w: usize, accent: Rgb) -> String {
 
 // Spectrum in braille, bass on the left: h rows by exactly w columns, one thin line per column (4 dots of height per
 // row). bands are 0..1; columns in between are interpolated.
-const DOTS: [u32; 5] = [0, 0x40, 0x44, 0x46, 0x47]; // 0 to 4 dots of the left braille column, filled from the bottom
-pub fn spectrum(bands: &[f64], w: usize, h: usize, accent: Rgb) -> Vec<String> {
+// The player's visualizer: one column per terminal column, `h` rows. Styles (Config): 0 dots that rise from the
+// bottom, 1 solid bars in eighth blocks, 2 a line of single dots at each level, 3 a mirror growing up and down from the
+// middle. Dots use the left braille column only, which leaves a thin gap between columns.
+const LEFT: [u32; 4] = [0x01, 0x02, 0x04, 0x40]; // the left braille dots, top to bottom
+const EIGHTHS: [char; 9] = [' ', '▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
+pub fn spectrum(bands: &[f64], w: usize, h: usize, accent: Rgb, style: usize) -> Vec<String> {
     let n = bands.len();
-    let heights: Vec<i64> = (0..w)
+    let level: Vec<f64> = (0..w)
         .map(|i| {
             let x = if w > 1 { (i * (n - 1)) as f64 / (w - 1) as f64 } else { 0.0 };
             let a = x.floor() as usize;
             let b = (a + 1).min(n - 1);
-            (((bands[a] + (bands[b] - bands[a]) * (x - a as f64)) * 4.0 * h as f64).round() as i64).max(1) // baseline
+            (bands[a] + (bands[b] - bands[a]) * (x - a as f64)).clamp(0.0, 1.0)
         })
         .collect();
+    let dots = 4 * h as i64; // dot rows, 0 at the top
+    // the dot rows each column lights, first to last; never empty, so silence still shows a baseline
+    let span = |f: f64| -> (i64, i64) {
+        let e = ((f * dots as f64).round() as i64).max(1);
+        match style {
+            2 => (dots - e, dots - e),
+            3 => {
+                let half = ((f * dots as f64 / 2.0).round() as i64).max(1);
+                (dots / 2 - half, dots / 2 + half - 1)
+            }
+            _ => (dots - e, dots - 1),
+        }
+    };
     (0..h)
         .map(|row| {
-            let floor = (h - 1 - row) as i64 * 4;
-            let s: String = heights.iter().filter_map(|e| char::from_u32(0x2800 + DOTS[(e - floor).clamp(0, 4) as usize])).collect();
-            let light = if h > 1 { 0.6 * (1.0 - row as f64 / (h - 1) as f64) } else { 0.0 }; // top rows are paler
+            let s: String = level
+                .iter()
+                .map(|&f| {
+                    if style == 1 {
+                        let e = ((f * 8.0 * h as f64).round() as i64).max(1);
+                        EIGHTHS[(e - (h - 1 - row) as i64 * 8).clamp(0, 8) as usize]
+                    } else {
+                        let (lo, hi) = span(f);
+                        let bits: u32 = (0..4).filter(|k| (lo..=hi).contains(&(row as i64 * 4 + k))).map(|k| LEFT[k as usize]).sum();
+                        char::from_u32(0x2800 + bits).unwrap_or(' ')
+                    }
+                })
+                .collect();
+            // paler towards the top, or towards the edges for the mirror
+            let t = if h < 2 { 0.0 } else if style == 3 { (row as f64 - (h - 1) as f64 / 2.0).abs() / ((h - 1) as f64 / 2.0) } else { 1.0 - row as f64 / (h - 1) as f64 };
+            let light = 0.6 * t;
             fg(accent.map(|c| (c as f64 + (255.0 - c as f64) * light).round() as u8), &s)
         })
         .collect()
@@ -239,6 +286,26 @@ pub fn search_bar(w: usize, title: &str, typing: bool, text: &str, placeholder: 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn visualizer_styles() {
+        let bands = [0.0, 0.5, 1.0, 0.5, 0.0];
+        for style in 0..4 {
+            let rows: Vec<String> = spectrum(&bands, 9, 3, [255, 255, 255], style).iter().map(|r| visible(r)).collect();
+            assert_eq!(rows.len(), 3);
+            assert!(rows.iter().all(|r| r.chars().count() == 9), "style {style}: {rows:?}");
+        }
+        let col = |rows: &[String], i: usize| rows.iter().map(|r| r.chars().nth(i).unwrap()).collect::<String>();
+        let bars: Vec<String> = spectrum(&bands, 5, 2, [0, 0, 0], 1).iter().map(|r| visible(r)).collect();
+        assert_eq!((col(&bars, 2), col(&bars, 0)), ("██".into(), " ▁".into()), "loud is full, silence a baseline");
+        // the mirror lights the middle of a quiet column, and a loud one top to bottom
+        let mirror: Vec<String> = spectrum(&bands, 5, 2, [0, 0, 0], 3).iter().map(|r| visible(r)).collect();
+        assert_eq!(col(&mirror, 0), "\u{2840}\u{2801}");
+        assert_eq!(col(&mirror, 2), "\u{2847}\u{2847}");
+        // the line is one dot per column
+        let line: Vec<String> = spectrum(&bands, 5, 2, [0, 0, 0], 2).iter().map(|r| visible(r)).collect();
+        assert_eq!(col(&line, 2), "\u{2801}\u{2800}");
+    }
 
     #[test]
     fn search_rows_are_exact() {

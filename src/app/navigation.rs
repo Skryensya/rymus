@@ -63,12 +63,22 @@ impl App {
 
     // Likes or dislikes t; without t, the highlighted track, or the playing one when the highlight is not a track
     // or the list is hidden (full player, lyrics).
+    // Runs your hook for an event, if there is one; a failure is told in the pane title.
+    pub(super) fn hook(&self, event: &'static str, t: &Item, extra: Value) {
+        let tx = self.tx.clone();
+        let data = self.db_path.parent().map(PathBuf::from).unwrap_or_default();
+        crate::hooks::run(&data, event, t, extra, move |problem| {
+            let _ = tx.send(Msg::Apply(Box::new(move |app: &mut App| app.msg = problem)));
+        });
+    }
+
     pub(super) fn rate(&mut self, like: bool, t: Option<Item>) {
         let t = t.or_else(|| {
             if !self.full && !self.lyrics && self.kind_at() == Kind::Track { self.cur().cloned() } else { self.now().cloned() }
         });
         let verb = if like { "like" } else { "dislike" };
         let Some(t) = t else { return self.set_note(format!("Nothing to {verb}")) };
+        let was_liked = self.likes.contains(&t.id);
         let on = if like { self.db.toggle_like(&t) } else { self.db.toggle_dislike(&t) };
         self.likes = self.db.liked_ids();
         self.dislikes = self.db.disliked_ids();
@@ -85,6 +95,12 @@ impl App {
             (true, false) => format!("{} Disliked", glyphs().dislike),
         };
         self.set_note(format!("{what}: {}", t.title));
+        if was_liked && !self.likes.contains(&t.id) {
+            self.hook("unliked", &t, json!({})); // by removing the like, or by disliking
+        }
+        if on {
+            self.hook(if like { "liked" } else { "disliked" }, &t, json!({}));
+        }
         // disliking what is playing moves on to the next song
         if on && !like && self.now().is_some_and(|n| n.id == t.id) && self.pos < self.queue.len() as i64 - 1 {
             self.cmd(json!(["playlist-next"]));
@@ -149,6 +165,10 @@ impl App {
             Action::PickPlaylist(tracks) => self.pick_playlist(tracks),
             Action::AddTo(id, name, tracks) => {
                 let added = tracks.iter().filter(|t| self.db.add_to_playlist(id, t)).count();
+                // one song you put there, not a whole queue at once: hundreds of hooks would start together
+                if let ([t], 1) = (tracks.as_slice(), added) {
+                    self.hook("playlist-add", t, json!({"playlist": name}));
+                }
                 self.set_note(match added {
                     0 => format!("Already in {name}"),
                     1 => format!("Added to {name}"),
@@ -169,7 +189,12 @@ impl App {
                 self.set_note("Playlist deleted".into());
             }
             Action::RemoveEntry(entry) => {
+                let song = self.items.iter().find(|t| t.uid == entry).cloned();
+                let name = self.viewed_playlist().and_then(|id| self.db.playlists().into_iter().find(|p| p.id == id.to_string()));
                 self.db.remove_entry(entry);
+                if let (Some(t), Some(p)) = (song, name) {
+                    self.hook("playlist-remove", &t, json!({"playlist": p.title}));
+                }
                 self.playlists_changed();
             }
             Action::Nothing => {}

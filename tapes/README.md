@@ -14,5 +14,6 @@ for t in tapes/*.tape; do [ "$t" = tapes/style.tape ] || vhs "$t"; done   # all 
   your own likes or history. `demo.sh history` adds a made-up month of listening (`history.sql`).
 - The searches are real, so YouTube Music's answers can change; if a tape lands on the wrong row, adjust its
   `Down` count.
+- `looks.tape` also saves the three stills `docs/look-*.png` (VHS `Screenshot`).
 - `trip.tape` is not in the README yet: the visualizer is being rebuilt. Record it once it is done.
 - VHS cannot show real images, so covers appear as coloured blocks, the same as "Pixel art covers" in Config.

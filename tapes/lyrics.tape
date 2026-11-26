@@ -7,16 +7,14 @@ Type "tapes/demo.sh"
 Enter
 Sleep 3s
 Type "/"
-Type "daft punk"
+Type "queen bohemian rhapsody"
 Enter
 Sleep 4s
+# past the albums, onto the first song: Queen's
+Down 9
 Enter
-Sleep 4s
-Down 2
-# Get Lucky
-Enter
-# wait, hidden, until the singing starts (about 20 s in); hidden time is not in the GIF
-Sleep 22s
+# wait, hidden, until the singing starts; hidden time is not in the GIF
+Sleep 8s
 Show
 
 # the words

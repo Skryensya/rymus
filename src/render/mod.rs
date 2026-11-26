@@ -129,7 +129,9 @@ impl App {
         let l = h.saturating_sub(if self.help { 5 } else { used } + extra).max(1);
         let mut mq = std::mem::take(&mut self.mq);
         mq.on = false; // set again by the focused row if its text overflows
-        let mut g = Geo { top: 4 + extra, ..Default::default() };
+        // the player above the lists moves the body down by the dock's height (its r rows and two borders)
+        let top_dock = self.player_top && !compact && !self.help;
+        let mut g = Geo { top: 4 + extra + if top_dock { r + 2 } else { 0 }, ..Default::default() };
         let now = self.now().cloned();
         // the cover is about what plays, else what is highlighted (a setting has nothing to show)
         let focus = now.clone().or_else(|| self.cur().filter(|i| !matches!(i.kind, Kind::Setting | Kind::Header)).cloned());
@@ -149,6 +151,7 @@ impl App {
         }
         // the color follows what plays, never the cursor; while its cover loads, the previous color stays
         match &now {
+            _ if self.accent.is_some() => self.theme.aim(self.accent.unwrap_or(GREEN)),
             Some(t) if !t.cover.is_empty() => {
                 if let Some(got) = got.as_deref() {
                     self.theme.aim(accent(Some(got)));
@@ -178,6 +181,7 @@ impl App {
         let label = if self.typing && self.naming.is_some() { "Name" } else { "/ Search" };
         let search = search_bar(w, label, self.typing, if self.typing { &self.buf } else { &self.query }, "artists, albums, songs, or a Spotify / YouTube playlist link", a, !compact);
         g.field_x1 = w;
+        g.field_y1 = 1 + search.len();
 
         // 4. The body. A busy spinner, an error or a note takes over the title of the focused pane.
         let over: Option<(String, Rgb)> = if !self.busy.is_empty() {
@@ -277,14 +281,20 @@ impl App {
         // 5. The player under the body: the framed dock, or two plain lines on a short screen
         let mut lines = vec![bar];
         lines.extend(search);
+        if top_dock {
+            let (rows, at) = self.dock(&mut g, w, lines.len() + 2, r, focus.as_ref(), got.as_ref(), a);
+            lines.extend(rows);
+            image = image.or(at);
+        }
         lines.extend(body);
-        if self.help {
-            // nothing under the ? page
+        if self.help || top_dock {
+            // nothing under the ? page; the dock is already above
         } else if compact {
             let player = self.compact_player(&v, &mut g, h, now.as_ref());
             lines.extend(player);
         } else {
-            let (rows, at) = self.dock(&mut g, w, l, r, focus.as_ref(), got.as_ref(), a);
+            let first = l + g.top + 2;
+            let (rows, at) = self.dock(&mut g, w, first, r, focus.as_ref(), got.as_ref(), a);
             lines.extend(rows);
             image = image.or(at);
         }

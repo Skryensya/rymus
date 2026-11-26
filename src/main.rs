@@ -29,6 +29,7 @@ mod mixes; //    radios and Discover mixes, built from candidates
 mod ui; //       frames, tab bar, search field, hints, text widths
 mod theme; //    the accent colour and how it changes
 mod home; //     how Home's sections share the height
+mod hooks; //    your own commands, run on likes, playlists and playback
 mod charts; //   the Stats charts
 mod bigtext; //  the big pixel letters of karaoke
 mod viz; //      the spectrum analyser (inside mpv's audio filter)
