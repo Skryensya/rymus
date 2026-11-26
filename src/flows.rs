@@ -225,6 +225,19 @@ fn enter_on_the_playing_song_pauses_instead_of_restarting() {
 }
 
 #[test]
+fn play_and_pause_show_at_once_before_mpv_answers() {
+    let mut ui = Ui::new();
+    ui.play_a_result();
+    ui.property("pause", json!(true));
+    ui.ch(' ');
+    assert!(!ui.app.paused, "playing on screen right away, while the headphones wake");
+    ui.ch(' ');
+    assert!(ui.app.paused);
+    ui.property("pause", json!(false)); // mpv's word wins
+    assert!(!ui.app.paused);
+}
+
+#[test]
 fn only_shift_arrows_seek() {
     let mut ui = Ui::new();
     ui.play_a_result();

@@ -321,6 +321,10 @@ impl App {
     pub(super) fn toggle_pause(&mut self) {
         if self.now().is_some() {
             self.cmd(json!(["cycle", "pause"]));
+            // shown at once: after a long pause the audio output (Bluetooth headphones above all) takes a second or two
+            // to wake, mpv answers only then, and a screen still saying "paused" gets pressed again, pausing it back
+            self.paused = !self.paused;
+            self.resumed = Instant::now();
         } else {
             self.resume();
         }

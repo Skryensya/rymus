@@ -20,8 +20,9 @@ impl App {
             need = true;
         }
         // after the Mac sleeps, mpv's audio output can come back stuck: playing, but silent and with time standing
-        // still until it is opened again (a seek did it by hand). Reopened once per stall.
-        if playing && !self.reloaded && now.duration_since(self.apos.map_or(self.resumed, |(_, at)| at.max(self.resumed))) > Duration::from_secs(2) {
+        // still until it is opened again (a seek did it by hand). Reopened once per stall; 4 s leaves Bluetooth
+        // headphones the second or two they take to wake after a long pause.
+        if playing && !self.reloaded && now.duration_since(self.apos.map_or(self.resumed, |(_, at)| at.max(self.resumed))) > Duration::from_secs(4) {
             self.reloaded = true;
             self.cmd(json!(["ao-reload"]));
         }
