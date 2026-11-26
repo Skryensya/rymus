@@ -100,7 +100,7 @@ impl Db {
                     .map(|i| match r.get_ref(i) {
                         Ok(rusqlite::types::ValueRef::Integer(n)) => n.to_string(),
                         Ok(rusqlite::types::ValueRef::Real(x)) => x.to_string(),
-                        Ok(rusqlite::types::ValueRef::Text(t)) => String::from_utf8_lossy(t).into_owned(),
+                        Ok(rusqlite::types::ValueRef::Text(t)) => crate::csv::defuse(&String::from_utf8_lossy(t)),
                         _ => String::new(), // NULL
                     })
                     .collect();
@@ -131,6 +131,8 @@ impl Db {
             let mut q = db.c.prepare(&sql).map_err(|e| e.to_string())?;
             for row in rows.filter(|r| r.len() == head.len()) {
                 // an empty field was NULL: text columns read it back as empty
+                // a file from anyone: no control characters (they would reach the terminal), formulas back as text
+                let row: Vec<String> = row.iter().map(|f| crate::item::clean(crate::csv::revive(f))).collect();
                 let values: Vec<Option<&str>> = row.iter().map(|f| (!f.is_empty()).then_some(f.as_str())).collect();
                 q.execute(rusqlite::params_from_iter(values)).map_err(|e| format!("{table}.csv: {e}"))?;
             }

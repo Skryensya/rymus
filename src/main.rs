@@ -125,6 +125,7 @@ fn ctl(action: &str) -> Result<(), String> {
         .flatten()
         .map(|e| e.path())
         .filter(|p| p.file_name().and_then(|n| n.to_str()).is_some_and(|n| n.starts_with("rymus-") && n.ends_with(".sock") && !n.contains("-tail")))
+        .filter(|p| platform::ours(&p.to_string_lossy(), false)) // /tmp is shared: only a player of yours
         .filter_map(|p| Some((p.metadata().and_then(|m| m.modified()).ok()?, p)))
         .collect();
     // the one whose rymus is running first (the name holds its pid), then the newest: a player left by Q has none

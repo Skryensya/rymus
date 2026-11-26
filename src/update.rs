@@ -59,9 +59,11 @@ pub fn install(tag: &str) -> Result<PathBuf, String> {
     let target = target().ok_or(tr!("there is no ready-made rymus for this computer: build it from source"))?;
     let name = format!("rymus-{tag}-{target}");
     let base = format!("https://github.com/{REPO}/releases/download/{tag}/{name}.tar.gz");
-    let work = std::env::temp_dir().join(format!("rymus-update-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&work);
-    std::fs::create_dir_all(&work).map_err(|e| e.to_string())?;
+    // /tmp is shared on Linux: a folder made now, readable by you alone, so no one can swap the download after it is checked
+    let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.subsec_nanos());
+    let work = std::env::temp_dir().join(format!("rymus-update-{}-{nanos}", std::process::id()));
+    use std::os::unix::fs::DirBuilderExt;
+    std::fs::DirBuilder::new().mode(0o700).create(&work).map_err(|e| e.to_string())?; // fails if it exists
     let archive = work.join(format!("{name}.tar.gz"));
     download(&base, &archive)?;
     download(&format!("{base}.sha256"), &work.join("sum"))?;

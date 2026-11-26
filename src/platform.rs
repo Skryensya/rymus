@@ -76,12 +76,13 @@ mod unix {
 
     // Only talk to something that is ours: /tmp is shared.
     pub fn left_by_us(socket: &str, viz: &str) -> bool {
-        let ours = |path: &str, fifo: bool| {
-            // SAFETY: getuid cannot fail
-            let me = unsafe { libc::getuid() };
-            std::fs::symlink_metadata(path).is_ok_and(|m| m.uid() == me && if fifo { m.file_type().is_fifo() } else { m.file_type().is_socket() })
-        };
         ours(socket, false) && ours(viz, true)
+    }
+    // A socket (or with `fifo`, a named pipe) that is yours, not a link, not someone else's.
+    pub fn ours(path: &str, fifo: bool) -> bool {
+        // SAFETY: getuid cannot fail
+        let me = unsafe { libc::getuid() };
+        std::fs::symlink_metadata(path).is_ok_and(|m| m.uid() == me && if fifo { m.file_type().is_fifo() } else { m.file_type().is_socket() })
     }
 
     pub fn remove(socket: &str, viz: &str) {

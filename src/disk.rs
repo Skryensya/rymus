@@ -41,12 +41,13 @@ pub fn human(bytes: u64) -> String {
 // A song from a file of your own: "Artist - Title.flac" when it is named so, else the file name, with its folder
 // as the album.
 pub fn own_track(p: &Path) -> Item {
-    let stem = p.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+    // a file name can hold any byte but / : no control characters on the terminal
+    let stem = crate::item::clean(&p.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default());
     let (artist, title) = match stem.split_once(" - ") {
         Some((a, t)) => (a.trim().to_string(), t.trim().to_string()),
         None => (String::new(), stem.clone()),
     };
-    let album = p.parent().and_then(|d| d.file_name()).map(|d| d.to_string_lossy().into_owned()).unwrap_or_default();
+    let album = p.parent().and_then(|d| d.file_name()).map(|d| crate::item::clean(&d.to_string_lossy())).unwrap_or_default();
     Item { kind: Kind::Track, id: format!("{OWN}{}", p.to_string_lossy()), title, artist, album, ..Default::default() }
 }
 
